@@ -2,8 +2,13 @@ This is a very simple ePub Reader that will read some ePub files by parsing xml 
 
 Just drop in a ePub 3.0 file into the resources and should get it parsed and displayed to you.
 
+THIS PROJECT DOESN'T CONTAIN ANY ePUB so download it from this link.
+
 http://code.google.com/p/epub-revision/downloads/detail?name=9780316000000_MobyDick_r2.epub
 
+More on Epub 3.0 features here
+
+http://idpf.org/epub/30
 
 Additional details.
 
