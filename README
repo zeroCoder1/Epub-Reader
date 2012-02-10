@@ -1,0 +1,31 @@
+This is a very simple ePub Reader that will read some ePub files by parsing xml file.
+
+Just drop in a ePub 3.0 file into the resources and should get it parsed and displayed to you.
+
+http://code.google.com/p/epub-revision/downloads/detail?name=9780316000000_MobyDick_r2.epub
+
+
+Additional details.
+
+ .Swipe to change chapters.
+ .There are text increase and decrese methods.
+ .Day/Night Mode.
+ .Search text.
+ .Orientation support
+
+The app will rememeber the size of the text and mode selected. 
+
+Are there any known bugs?
+No. But if you find some just let me know. 
+
+
+Projects I used:
+
+https://github.com/fedefrappi/AePubReader
+https://github.com/st3fan/iphone-bookreader
+
+I have forked them into my rep
+
+
+Please feel free to use this code. Do let me if you add some awesome features into it..
+
