@@ -282,9 +282,6 @@
     //[animation setType:kcat]; 
     [animation setSubtype:@"fromRight"];
     
-    
-    
-    
     [_webview reload];
     _pageNumber++;
     [self loadPage];
