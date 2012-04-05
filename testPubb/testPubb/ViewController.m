@@ -225,6 +225,30 @@
 }
 
 
+
+- (IBAction)swipeRightAction1:(id)ignored{
+    
+    [_webview reload];
+    _pageNumber--;
+    [self loadPage];
+    
+    
+}
+
+
+
+- (IBAction)swipeLeftAction1:(id)ignored
+{
+    
+    [_webview reload];
+    _pageNumber++;
+    [self loadPage];
+    
+    
+    
+}
+
+
 -(IBAction)plusA:(id)sender{
     
     NSUserDefaults *userDefaults1 = [NSUserDefaults standardUserDefaults];

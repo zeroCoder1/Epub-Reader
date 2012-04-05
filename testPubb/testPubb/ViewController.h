@@ -46,6 +46,8 @@
 -(IBAction)minusA:(id)sender;
 -(IBAction)day:(id)sender;
 -(IBAction)night:(id)sender;
+- (IBAction)swipeRightAction1:(id)ignored;
+- (IBAction)swipeLeftAction1:(id)ignored;
 
 
 
