@@ -9,7 +9,7 @@
 #import <UIKit/UIKit.h>
 #import "EpubContent.h"
 #import "XMLHandler.h"
-
+#import <QuartzCore/QuartzCore.h>
 
 @interface ViewController : UIViewController<XMLHandlerDelegate,UIGestureRecognizerDelegate,UIWebViewDelegate,UISearchBarDelegate>{
     
@@ -46,9 +46,9 @@
 -(IBAction)minusA:(id)sender;
 -(IBAction)day:(id)sender;
 -(IBAction)night:(id)sender;
-- (IBAction)swipeRightAction1:(id)ignored;
-- (IBAction)swipeLeftAction1:(id)ignored;
 
+- (IBAction)next:(id)ignored;
+- (IBAction)prev:(id)ignored;
 
 
 @end

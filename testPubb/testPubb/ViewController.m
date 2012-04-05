@@ -202,12 +202,24 @@
 
 
 
+
+
 - (void)swipeRightAction:(id)ignored{
     
+    CATransition *animation = [CATransition animation];
+    [animation setDelegate:self];
+    [animation setDuration:0.5f];
+    [animation setType:@"pageUnCurl"];
+    
+    //[animation setType:kcat]; 
+    [animation setSubtype:@"fromRight"];
+    
+
     [_webview reload];
     _pageNumber--;
     [self loadPage];
-       
+    [[_webview layer] addAnimation:animation forKey:@"WebPageUnCurl"]; 
+
 
 }
 
@@ -215,34 +227,70 @@
 
 - (void)swipeLeftAction:(id)ignored
 {
+    
+    CATransition *animation = [CATransition animation];
+    [animation setDelegate:self];
+    [animation setDuration:0.5f];
+    [animation setType:@"pageCurl"];
+    
+    //[animation setType:kcat]; 
+    [animation setSubtype:@"fromRight"];
+    
+
+    
 
     [_webview reload];
     _pageNumber++;
     [self loadPage];
     
+    [[_webview layer] addAnimation:animation forKey:@"WebPageCurl"]; 
+
 
 
 }
 
 
 
-- (IBAction)swipeRightAction1:(id)ignored{
+- (IBAction)prev:(id)ignored{
+    CATransition *animation = [CATransition animation];
+    [animation setDelegate:self];
+    [animation setDuration:0.5f];
+    [animation setType:@"pageUnCurl"];
+    
+    //[animation setType:kcat]; 
+    [animation setSubtype:@"fromRight"];
+    
     
     [_webview reload];
     _pageNumber--;
     [self loadPage];
+    [[_webview layer] addAnimation:animation forKey:@"WebPageUnCurl"]; 
     
     
 }
 
 
 
-- (IBAction)swipeLeftAction1:(id)ignored
+- (IBAction)next:(id)ignored
 {
+    
+    CATransition *animation = [CATransition animation];
+    [animation setDelegate:self];
+    [animation setDuration:0.5f];
+    [animation setType:@"pageCurl"];
+    
+    //[animation setType:kcat]; 
+    [animation setSubtype:@"fromRight"];
+    
+    
+    
     
     [_webview reload];
     _pageNumber++;
     [self loadPage];
+    
+    [[_webview layer] addAnimation:animation forKey:@"WebPageCurl"]; 
+
     
     
     
