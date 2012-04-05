@@ -256,8 +256,6 @@
     [animation setDelegate:self];
     [animation setDuration:0.5f];
     [animation setType:@"pageUnCurl"];
-    
-    //[animation setType:kcat]; 
     [animation setSubtype:@"fromRight"];
     
     
@@ -278,10 +276,7 @@
     [animation setDelegate:self];
     [animation setDuration:0.5f];
     [animation setType:@"pageCurl"];
-    
-    //[animation setType:kcat]; 
     [animation setSubtype:@"fromRight"];
-    
     [_webview reload];
     _pageNumber++;
     [self loadPage];
