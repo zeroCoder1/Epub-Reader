@@ -206,6 +206,9 @@
 
 - (void)swipeRightAction:(id)ignored{
     
+    if (_pageNumber >0 ) {
+  
+    
     CATransition *animation = [CATransition animation];
     [animation setDelegate:self];
     [animation setDuration:0.5f];
@@ -219,7 +222,7 @@
     _pageNumber--;
     [self loadPage];
     [[_webview layer] addAnimation:animation forKey:@"WebPageUnCurl"]; 
-
+  }
 
 }
 
@@ -228,6 +231,8 @@
 - (void)swipeLeftAction:(id)ignored
 {
     
+    if (_pageNumber < [self._ePubContent._spine count]-1 ) {
+
     CATransition *animation = [CATransition animation];
     [animation setDelegate:self];
     [animation setDuration:0.5f];
@@ -245,13 +250,16 @@
     
     [[_webview layer] addAnimation:animation forKey:@"WebPageCurl"]; 
 
-
+    }
 
 }
 
 
 
 - (IBAction)prev:(id)ignored{
+    
+    if (_pageNumber >0 ) {
+
     CATransition *animation = [CATransition animation];
     [animation setDelegate:self];
     [animation setDuration:0.5f];
@@ -264,13 +272,15 @@
     [self loadPage];
     [[_webview layer] addAnimation:animation forKey:@"WebPageUnCurl"]; 
     
-    
+    }
 }
 
 
 
 - (IBAction)next:(id)ignored
 {
+    if (_pageNumber < [self._ePubContent._spine count]-1 ) {
+
     
     CATransition *animation = [CATransition animation];
     [animation setDelegate:self];
@@ -283,7 +293,7 @@
     
     [[_webview layer] addAnimation:animation forKey:@"WebPageCurl"]; 
 
-    
+    }
     
     
 }
