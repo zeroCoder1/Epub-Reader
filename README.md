@@ -1,4 +1,6 @@
 # Epub-Reader
+![Travis](https://travis-ci.org/zeroCoder1/Epub-Reader.svg?branch=master)
+
 Reads an ePub document for iPad/ iPhone
 
 This is a very simple ePub Reader that will read some ePub files by parsing xml file.
