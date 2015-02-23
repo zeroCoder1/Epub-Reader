@@ -8,9 +8,14 @@
 
 - (void)parseXMLFileAt:(NSString*)strPath{
 
-	_parser=[[NSXMLParser alloc] initWithContentsOfURL:[NSURL fileURLWithPath:strPath]];
-	_parser.delegate=self;
-	[_parser parse];
+	dispatch_queue_t reentrantAvoidanceQueue = dispatch_queue_create("reentrantAvoidanceQueue", DISPATCH_QUEUE_SERIAL);
+    dispatch_async(reentrantAvoidanceQueue, ^{
+        _parser = [[NSXMLParser alloc]initWithContentsOfURL:[NSURL fileURLWithPath:strPath]];
+        [_parser setDelegate:self];
+        [_parser setShouldResolveExternalEntities:YES];
+        [_parser parse];
+    });
+    dispatch_sync(reentrantAvoidanceQueue, ^{ });
 }
 
 - (void)parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError {
