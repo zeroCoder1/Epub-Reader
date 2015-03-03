@@ -1,5 +1,5 @@
 # Epub-Reader
-![Travis](https://travis-ci.org/zeroCoder1/Epub-Reader)
+[![Build Status](https://travis-ci.org/zeroCoder1/Epub-Reader.svg?branch=master)](https://travis-ci.org/zeroCoder1/Epub-Reader)
 
 Reads an ePub document for iPad/ iPhone
 
