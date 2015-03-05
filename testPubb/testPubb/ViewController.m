@@ -7,7 +7,7 @@
 //
 
 #import "ViewController.h"
-#import "ZipArchive.h"
+#import "SSZipArchive.h"
 
 
 @implementation ViewController
@@ -61,32 +61,10 @@
 
 - (void)unzipAndSaveFile{
 	
-	ZipArchive* za = [[ZipArchive alloc] init];
-	if( [za UnzipOpenFile:[[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"]] ){
-		
-		NSString *strPath=[NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
-		//Delete all the previous files
-		NSFileManager *filemanager=[[NSFileManager alloc] init];
-		if ([filemanager fileExistsAtPath:strPath]) {
-			
-			NSError *error;
-			[filemanager removeItemAtPath:strPath error:&error];
-		}
-		filemanager=nil;
-		//start unzip
-		BOOL ret = [za UnzipFileTo:[NSString stringWithFormat:@"%@/",strPath] overWrite:YES];
-		if( NO==ret ){
-			// error handler here
-			UIAlertView *alert=[[UIAlertView alloc] initWithTitle:@"Error"
-														  message:@"An unknown error occured"
-														 delegate:self
-												cancelButtonTitle:@"OK"
-												otherButtonTitles:nil];
-			[alert show];
-			alert=nil;
-		}
-		[za UnzipCloseFile];
-	}					
+    NSString *zipPath = [[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"];
+    NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
+    [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath];
+
 }
 
 /*Function Name : applicationDocumentsDirectory
