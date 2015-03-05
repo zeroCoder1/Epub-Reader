@@ -21,6 +21,6 @@
 	NSMutableArray *_spinearray;
 }
 
-@property (nonatomic, retain) id<XMLHandlerDelegate> delegate;
+@property (nonatomic, strong) id<XMLHandlerDelegate> delegate;
 - (void)parseXMLFileAt:(NSString*)strPath;
 @end

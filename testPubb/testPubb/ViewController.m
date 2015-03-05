@@ -194,6 +194,9 @@
 	//set page number
 	_pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
     
+    
+    
+    
        
     
 }

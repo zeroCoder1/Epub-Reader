@@ -8,7 +8,7 @@
 	NSMutableArray *_spine;
 }
 
-@property (nonatomic, retain) NSMutableDictionary *_manifest;
-@property (nonatomic, retain) NSMutableArray *_spine; 
+@property (nonatomic, strong) NSMutableDictionary *_manifest;
+@property (nonatomic, strong) NSMutableArray *_spine;
 
 @end
