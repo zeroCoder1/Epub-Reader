@@ -34,9 +34,7 @@
 	_xmlHandler.delegate=self;
 	[_xmlHandler parseXMLFileAt:[self getRootFilePath]];
     
-    for (id subview in _webview.subviews)
-        if ([[subview class] isSubclassOfClass: [UIScrollView class]])
-            ((UIScrollView *)subview).bounces = NO;
+    
     
     UISwipeGestureRecognizer *swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(swipeRightAction:)];
     swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
@@ -457,7 +455,6 @@
 
 
 - (IBAction)removeHighlightsB{
-    
     
     [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_RemoveAllHighlights()"];  // to remove highlight
     [self.view endEditing:YES];
