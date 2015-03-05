@@ -1,5 +1,5 @@
 **Refactoring the code**
-Loaded epub into a TextView, renders faster, need to know which one works faster.
+Loaded epub into a TextView, renders faster, need to know which one works faster. If anyone wants to checkout, look into the experimental branch. Pull requests welcome.
 
 # Epub-Reader
 [![Build Status](https://travis-ci.org/zeroCoder1/Epub-Reader.svg?branch=master)](https://travis-ci.org/zeroCoder1/Epub-Reader)
