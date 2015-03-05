@@ -1,4 +1,4 @@
-What happends when you load an Epub into a textView, look into the [![Experimental Brank]**https://github.com/zeroCoder1/Epub-Reader/tree/Experimental** 
+What happends when you load an Epub into a textView, look into the [![Experimental Branch](https://github.com/zeroCoder1/Epub-Reader/tree/Experimental) 
 
 # Epub-Reader
 [![Build Status](https://travis-ci.org/zeroCoder1/Epub-Reader.svg?branch=master)](https://travis-ci.org/zeroCoder1/Epub-Reader)
