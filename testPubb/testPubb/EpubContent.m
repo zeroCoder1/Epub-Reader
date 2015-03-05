@@ -13,7 +13,7 @@
 //	_manifest=nil;
 //	[_spine release];
 //	_spine=nil; 
-//	[super dealloc];
+
 }
 
 @end

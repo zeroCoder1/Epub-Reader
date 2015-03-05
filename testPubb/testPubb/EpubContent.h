@@ -10,7 +10,7 @@
 
 @property (nonatomic, retain) NSMutableDictionary *_manifest;
 @property (nonatomic, retain) NSMutableArray *_spine; 
-@property (nonatomic,assign) NSString *stringEpub;
+
 
 
 @end

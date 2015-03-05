@@ -23,7 +23,10 @@
 	NSString *_rootPath;
 	NSString *_strFileName;
 	int _pageNumber;
+    
     NSUInteger textFontSize;
+    UIColor* color;
+    
     BOOL isInverted;
 }
 
@@ -31,7 +34,10 @@
 @property (nonatomic, strong)EpubContent *_ePubContent;
 @property (nonatomic, strong)NSString *_rootPath;
 @property (nonatomic, strong)NSString *_strFileName;
-@property (nonatomic, strong) IBOutlet UIWebView *_webview;
+
+@property (strong, nonatomic) IBOutlet UITextView *textView;
+
+
 
 - (void)unzipAndSaveFile;
 - (NSString *)applicationDocumentsDirectory; 

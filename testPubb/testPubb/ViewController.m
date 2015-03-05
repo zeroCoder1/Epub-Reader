@@ -14,7 +14,7 @@
 @synthesize _ePubContent;
 @synthesize _rootPath;
 @synthesize _strFileName;
-@synthesize _webview;
+
 
 - (void)didReceiveMemoryWarning
 {
@@ -28,7 +28,7 @@
 {
     [super viewDidLoad];
 	// Do any additional setup after loading the view, typically from a nib.
-    [_webview setBackgroundColor:[UIColor clearColor]];
+    [_textView setBackgroundColor:[UIColor whiteColor]];
     [self unzipAndSaveFile];
 	_xmlHandler=[[XMLHandler alloc] init];
 	_xmlHandler.delegate=self;
@@ -39,15 +39,15 @@
     UISwipeGestureRecognizer *swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(swipeRightAction:)];
     swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
     swipeRight.delegate = self;
-    [_webview addGestureRecognizer:swipeRight];
+    [_textView addGestureRecognizer:swipeRight];
     
     UISwipeGestureRecognizer *swipeLeft = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(swipeLeftAction:)];
     swipeLeft.direction = UISwipeGestureRecognizerDirectionLeft;
     swipeLeft.delegate = self;
-    [_webview addGestureRecognizer:swipeLeft];
+    [_textView addGestureRecognizer:swipeLeft];
 
-    textFontSize = 100;
-    
+    textFontSize = 14;
+    _textView.textColor = color;
   
 }
 
@@ -65,34 +65,6 @@
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
     [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath];
     
-    
-    
-//    
-//	if( [za UnzipOpenFile:[[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"]] ){
-//		
-//		NSString *strPath=[NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
-//		//Delete all the previous files
-//		NSFileManager *filemanager=[[NSFileManager alloc] init];
-//		if ([filemanager fileExistsAtPath:strPath]) {
-//			
-//			NSError *error;
-//			[filemanager removeItemAtPath:strPath error:&error];
-//		}
-//		filemanager=nil;
-//		//start unzip
-//		BOOL ret = [za UnzipFileTo:[NSString stringWithFormat:@"%@/",strPath] overWrite:YES];
-//		if( NO==ret ){
-//			// error handler here
-//			UIAlertView *alert=[[UIAlertView alloc] initWithTitle:@"Error"
-//														  message:@"An unknown error occured"
-//														 delegate:self
-//												cancelButtonTitle:@"OK"
-//												otherButtonTitles:nil];
-//			[alert show];
-//			alert=nil;
-//		}
-//		[za UnzipCloseFile];
-	//}
 }
 
 /*Function Name : applicationDocumentsDirectory
@@ -123,11 +95,11 @@
 		
 		//valid ePub
 		NSLog(@"Parse now");
-		
-		//[filemanager release];
-		//filemanager=nil;
-		
+
 		return strFilePath;
+        
+
+
 	}
 	else {
 		
@@ -196,11 +168,25 @@
    
 	
 	_pagesPath=[NSString stringWithFormat:@"%@/%@",self._rootPath,[self._ePubContent._manifest valueForKey:[self._ePubContent._spine objectAtIndex:_pageNumber]]];
-	[_webview loadRequest:[NSURLRequest requestWithURL:[NSURL fileURLWithPath:_pagesPath]]];
+	//[_webview loadRequest:[NSURLRequest requestWithURL:[NSURL fileURLWithPath:_pagesPath]]];
 	//set page number
-	_pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
+    NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
+
     
-       
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSAttributedString *attributedString = [[NSAttributedString alloc] initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
+        _textView.attributedText = attributedString;
+        _textView.font = [UIFont systemFontOfSize:textFontSize];
+        _textView.textColor = color;
+    });
+    
+   //
+    
+    
+    
+    _pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
+    
+    
     
 }
 
@@ -222,10 +208,10 @@
     [animation setSubtype:@"fromRight"];
     
 
-    [_webview reload];
+    //[_webview reload];
     _pageNumber--;
     [self loadPage];
-    [[_webview layer] addAnimation:animation forKey:@"WebPageUnCurl"]; 
+    [[_textView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
   }
 
 }
@@ -248,11 +234,11 @@
 
     
 
-    [_webview reload];
+    //[_textView reload];
     _pageNumber++;
     [self loadPage];
     
-    [[_webview layer] addAnimation:animation forKey:@"WebPageCurl"]; 
+    [[_textView layer] addAnimation:animation forKey:@"WebPageCurl"];
 
     }
 
@@ -271,10 +257,10 @@
     [animation setSubtype:@"fromRight"];
     
     
-    [_webview reload];
+   // [_webview reload];
     _pageNumber--;
     [self loadPage];
-    [[_webview layer] addAnimation:animation forKey:@"WebPageUnCurl"]; 
+    [[_textView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
     
     }
 }
@@ -291,11 +277,11 @@
     [animation setDuration:0.5f];
     [animation setType:@"pageCurl"];
     [animation setSubtype:@"fromRight"];
-    [_webview reload];
+    //[_webview reload];
     _pageNumber++;
     [self loadPage];
     
-    [[_webview layer] addAnimation:animation forKey:@"WebPageCurl"]; 
+    [[_textView layer] addAnimation:animation forKey:@"WebPageCurl"];
 
     }
     
@@ -305,27 +291,19 @@
 
 -(IBAction)plusA:(id)sender{
     
-    NSUserDefaults *userDefaults1 = [NSUserDefaults standardUserDefaults];
-    [userDefaults1 setBool:YES forKey:@"btnM2"];
-    [userDefaults1 synchronize];
+    textFontSize = (textFontSize < 50) ? textFontSize +2 : textFontSize;
+    [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
     
-    textFontSize = (textFontSize < 140) ? textFontSize +2 : textFontSize;
-    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-    [_webview stringByEvaluatingJavaScriptFromString:jsString];
-    
+
 }
 
 
 
 -(IBAction)minusA:(id)sender{
-    
-    NSUserDefaults *userDefaults1 = [NSUserDefaults standardUserDefaults];
-    [userDefaults1 setBool:NO forKey:@"btnM2"];
-    [userDefaults1 synchronize];
-    
-    textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
-    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-    [_webview stringByEvaluatingJavaScriptFromString:jsString];
+
+    textFontSize = (textFontSize > 14) ? textFontSize -2 : textFontSize;
+   [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
+
 
 }
 
@@ -336,10 +314,10 @@
     [userDefaults setBool:YES forKey:@"btnM1"];
     [userDefaults synchronize];
     
-    [_webview setOpaque:NO];
-    [_webview setBackgroundColor:[UIColor whiteColor]];
-    NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'black'"];
-    [_webview stringByEvaluatingJavaScriptFromString:jsString2];
+    [_textView setOpaque:NO];
+    [_textView setBackgroundColor:[UIColor whiteColor]];
+    _textView.textColor = [UIColor blackColor];
+    color = [UIColor blackColor];
    
 }
 
@@ -351,11 +329,11 @@
      [userDefaults2 setBool:NO forKey:@"btnM1"];
     [userDefaults2 synchronize];
     
-    [_webview setOpaque:NO];
-    [_webview setBackgroundColor:[UIColor blackColor]];
-    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'white'"];
-    [_webview stringByEvaluatingJavaScriptFromString:jsString];
-    
+    [_textView setOpaque:NO];
+    [_textView setBackgroundColor:[UIColor blackColor]];
+    _textView.textColor = [UIColor whiteColor];
+    color = [UIColor whiteColor];
+
 }
 
 
@@ -366,103 +344,101 @@
 }
 
 
-- (void)webViewDidFinishLoad:(UIWebView *)webView
-{
-    
-    
-    NSUserDefaults *menuUserDefaults = [NSUserDefaults standardUserDefaults];
-
-    if([menuUserDefaults boolForKey:@"btnM1"]){
-        [_webview setOpaque:NO];
-        [_webview setBackgroundColor:[UIColor whiteColor]];
-        NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'black'"];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString2];
-    
-    }
-    
-    else{
-        [_webview setOpaque:NO];
-        [_webview setBackgroundColor:[UIColor blackColor]];
-        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'white'"];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-    
-    }
-    
-    NSUserDefaults *menuUserDefaults2 = [NSUserDefaults standardUserDefaults];
-    
-    if([menuUserDefaults2 boolForKey:@"btnM2"]){
-       
-        textFontSize = (textFontSize < 140) ? textFontSize +2 : textFontSize;
-        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-        
-    }
-    
-    else{
-              
-        textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
-        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-        
-    }
-    
-    
-    
-}
+//- (void)webViewDidFinishLoad:(UIWebView *)webView{
+//    
+//    
+//    NSUserDefaults *menuUserDefaults = [NSUserDefaults standardUserDefaults];
+//
+//    if([menuUserDefaults boolForKey:@"btnM1"]){
+//        [_webview setOpaque:NO];
+//        [_webview setBackgroundColor:[UIColor whiteColor]];
+//        NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'black'"];
+//        [_webview stringByEvaluatingJavaScriptFromString:jsString2];
+//    
+//    }
+//    
+//    else{
+//        [_webview setOpaque:NO];
+//        [_webview setBackgroundColor:[UIColor blackColor]];
+//        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'white'"];
+//        [_webview stringByEvaluatingJavaScriptFromString:jsString];
+//    
+//    }
+//    
+//    NSUserDefaults *menuUserDefaults2 = [NSUserDefaults standardUserDefaults];
+//    
+//    if([menuUserDefaults2 boolForKey:@"btnM2"]){
+//       
+//        textFontSize = (textFontSize < 140) ? textFontSize +2 : textFontSize;
+//        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
+//        [_webview stringByEvaluatingJavaScriptFromString:jsString];
+//        
+//    }
+//    
+//    else{
+//              
+//        textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
+//        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
+//        [_webview stringByEvaluatingJavaScriptFromString:jsString];
+//        
+//    }
+//    
+//    
+//    
+//}
 
 /*
  Search A string inside UIWebView with the use of the javascript function
  */
 
-- (NSInteger)stringHighlight:(NSString*)str
-{
-    // The JS File   
-    NSString *filePath  = [[NSBundle mainBundle] pathForResource:@"UIWebViewSearch" ofType:@"js" inDirectory:@""];
-    NSData *fileData    = [NSData dataWithContentsOfFile:filePath];
-    NSString *jsString  = [[NSMutableString alloc] initWithData:fileData encoding:NSUTF8StringEncoding];
-    [_webview stringByEvaluatingJavaScriptFromString:jsString];
-
-    
-    // The JS Function
-    NSString *startSearch   = [NSString stringWithFormat:@"uiWebview_HighlightAllOccurencesOfString('%@')",str];
-    [_webview stringByEvaluatingJavaScriptFromString:startSearch];
-    NSString *result        = [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_SearchResultCount"];
-    return [result integerValue];
-}
 
 
 
 - (void)removeHighlights{
     
    
-    [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_RemoveAllHighlights()"];  // to remove highlight
+   // [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_RemoveAllHighlights()"];  // to remove highlight
 }
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
     
-    [self removeHighlights];
+
+    NSString * searchString = searchBar.text;
+    NSString *html = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
+    NSMutableAttributedString *attributedString = [[NSMutableAttributedString alloc] initWithData:[html dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
+    _textView.attributedText = attributedString;
+
+    NSString * baseString = _textView.text;
     
-    int resultCount = [self stringHighlight:searchBar.text];
+    NSError *error = nil;
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:searchString options:NSRegularExpressionCaseInsensitive error:&error];
+    NSArray *matches = [regex matchesInString:baseString
+                                      options:0
+                                        range:NSMakeRange(0, baseString.length)];
     
-    // If no occurences of string, show alert message
-    if (resultCount <= 0) {
-        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"LOL!" 
-                                                        message:[NSString stringWithFormat:@"Type again and You might find it: %@", searchBar.text]
-                                                       delegate:nil 
-                                              cancelButtonTitle:@"Ok" 
-                                              otherButtonTitles:nil];
-        [alert show];
-        //[alert release];
+    for (NSTextCheckingResult *match in matches)
+    {
+        NSRange matchRange = [match rangeAtIndex:0];
+        [attributedString addAttribute:NSBackgroundColorAttributeName
+                                 value:[UIColor yellowColor]
+                                 range:matchRange];
     }
+  
+    _textView.attributedText = attributedString;
+    [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
+
+
+
     
-    // remove kkeyboard
-    [searchBar resignFirstResponder];
+    
+    [searchBar becomeFirstResponder];
 }
 
 
 - (IBAction)removeHighlightsB{
     
-    [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_RemoveAllHighlights()"];  // to remove highlight
+  //  [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_RemoveAllHighlights()"];  // to remove highlight
+    [self loadPage];
     [self.view endEditing:YES];
 }
 
@@ -470,30 +446,25 @@
 
 
 
-- (void)viewDidUnload
-{
+- (void)viewDidUnload{
     [super viewDidUnload];
     // Release any retained subviews of the main view.
     // e.g. self.myOutlet = nil;
 }
 
-- (void)viewWillAppear:(BOOL)animated
-{
+- (void)viewWillAppear:(BOOL)animated{
     [super viewWillAppear:animated];
 }
 
-- (void)viewDidAppear:(BOOL)animated
-{
+- (void)viewDidAppear:(BOOL)animated{
     [super viewDidAppear:animated];
 }
 
-- (void)viewWillDisappear:(BOOL)animated
-{
+- (void)viewWillDisappear:(BOOL)animated{
 	[super viewWillDisappear:animated];
 }
 
-- (void)viewDidDisappear:(BOOL)animated
-{
+- (void)viewDidDisappear:(BOOL)animated{
 	[super viewDidDisappear:animated];
 }
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.iPad.XIB" version="3.0" toolsVersion="6254" systemVersion="14C109" targetRuntime="iOS.CocoaTouch.iPad" propertyAccessControl="none" useAutolayout="YES" promptedForUpgradeToXcode5="NO">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.iPad.XIB" version="3.0" toolsVersion="6254" systemVersion="14C109" targetRuntime="iOS.CocoaTouch.iPad" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
         <deployment version="1536" identifier="iOS"/>
         <development version="5000" identifier="xcode"/>
@@ -9,7 +9,7 @@
         <placeholder placeholderIdentifier="IBFilesOwner" id="-1" userLabel="File's Owner" customClass="ViewController">
             <connections>
                 <outlet property="_pageNumberLbl" destination="6" id="7"/>
-                <outlet property="_webview" destination="4" id="5"/>
+                <outlet property="textView" destination="x0j-yl-Sqm" id="bhK-74-yTQ"/>
                 <outlet property="view" destination="2" id="3"/>
             </connections>
         </placeholder>
@@ -59,14 +59,13 @@
                         </barButtonItem>
                     </items>
                 </toolbar>
-                <webView contentMode="scaleToFill" scalesPageToFit="YES" translatesAutoresizingMaskIntoConstraints="NO" id="4">
+                <textView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="x0j-yl-Sqm">
                     <rect key="frame" x="0.0" y="69" width="768" height="872"/>
-                    <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="calibratedRGB"/>
-                    <dataDetectorType key="dataDetectorTypes" phoneNumber="YES" link="YES" address="YES" calendarEvent="YES"/>
-                    <connections>
-                        <outlet property="delegate" destination="-1" id="28"/>
-                    </connections>
-                </webView>
+                    <color key="backgroundColor" white="1" alpha="1" colorSpace="calibratedWhite"/>
+                    <string key="text">Lorem ipsum dolor sit er elit lamet, consectetaur cillium adipisicing pecu, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Nam liber te conscient to factor tum poen legum odioque civiuda.</string>
+                    <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                    <textInputTraits key="textInputTraits" autocapitalizationType="sentences"/>
+                </textView>
                 <toolbar opaque="NO" clearsContextBeforeDrawing="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="104">
                     <rect key="frame" x="0.0" y="941" width="768" height="44"/>
                     <items>
@@ -105,21 +104,20 @@
             <color key="backgroundColor" red="0.96078431372549022" green="0.96078431372549022" blue="0.96078431372549022" alpha="1" colorSpace="calibratedRGB"/>
             <constraints>
                 <constraint firstAttribute="trailing" secondItem="104" secondAttribute="trailing" id="0mb-8i-5Qq"/>
+                <constraint firstItem="x0j-yl-Sqm" firstAttribute="width" secondItem="51" secondAttribute="width" id="3eI-pe-gyA"/>
+                <constraint firstItem="114" firstAttribute="top" secondItem="x0j-yl-Sqm" secondAttribute="bottom" constant="44" id="4Cu-W4-Ea5"/>
                 <constraint firstItem="114" firstAttribute="leading" secondItem="104" secondAttribute="leading" id="9EO-bR-oqF"/>
-                <constraint firstItem="4" firstAttribute="top" secondItem="51" secondAttribute="bottom" id="9bV-MQ-dqF"/>
-                <constraint firstItem="4" firstAttribute="width" secondItem="104" secondAttribute="width" id="BVN-8w-bxR"/>
-                <constraint firstItem="51" firstAttribute="width" secondItem="4" secondAttribute="width" id="Gbo-MX-MDq"/>
+                <constraint firstItem="x0j-yl-Sqm" firstAttribute="leading" secondItem="2" secondAttribute="leading" id="DWW-cf-5hO"/>
+                <constraint firstItem="x0j-yl-Sqm" firstAttribute="top" secondItem="51" secondAttribute="bottom" id="GXb-Y2-pbE"/>
                 <constraint firstAttribute="bottom" secondItem="114" secondAttribute="bottom" constant="-2" id="Hmd-RS-GWQ"/>
                 <constraint firstItem="51" firstAttribute="top" secondItem="2" secondAttribute="top" constant="25" id="PUl-9V-NJh"/>
-                <constraint firstItem="4" firstAttribute="leading" secondItem="2" secondAttribute="leading" id="XpP-vP-XMs"/>
-                <constraint firstItem="104" firstAttribute="top" secondItem="4" secondAttribute="bottom" id="hum-rK-kRo"/>
+                <constraint firstAttribute="bottom" secondItem="x0j-yl-Sqm" secondAttribute="bottom" constant="83" id="bPk-XP-WgH"/>
                 <constraint firstAttribute="centerX" secondItem="51" secondAttribute="centerX" id="i8u-S3-g0C"/>
                 <constraint firstItem="104" firstAttribute="leading" secondItem="2" secondAttribute="leading" id="iX3-Pj-6G2"/>
                 <constraint firstItem="114" firstAttribute="width" secondItem="104" secondAttribute="width" id="jiT-X5-REE"/>
-                <constraint firstAttribute="bottom" secondItem="4" secondAttribute="bottom" constant="83" id="tYh-6P-k0z"/>
                 <constraint firstItem="51" firstAttribute="leading" secondItem="2" secondAttribute="leading" id="ucK-cn-rAB"/>
+                <constraint firstItem="104" firstAttribute="top" secondItem="x0j-yl-Sqm" secondAttribute="bottom" id="wPt-sZ-1za"/>
                 <constraint firstItem="114" firstAttribute="top" secondItem="104" secondAttribute="bottom" id="xEE-Z1-szh"/>
-                <constraint firstItem="114" firstAttribute="top" secondItem="4" secondAttribute="bottom" constant="44" id="zB2-iu-37E"/>
             </constraints>
             <simulatedStatusBarMetrics key="simulatedStatusBarMetrics"/>
             <simulatedScreenMetrics key="simulatedDestinationMetrics"/>
