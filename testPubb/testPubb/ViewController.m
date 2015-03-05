@@ -173,6 +173,7 @@
     NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
 
     
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         NSAttributedString *attributedString = [[NSAttributedString alloc] initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
         _textView.attributedText = attributedString;
@@ -310,9 +311,7 @@
 
 -(IBAction)day:(id)sender{
     
-    NSUserDefaults *userDefaults = [NSUserDefaults standardUserDefaults];
-    [userDefaults setBool:YES forKey:@"btnM1"];
-    [userDefaults synchronize];
+
     
     [_textView setOpaque:NO];
     [_textView setBackgroundColor:[UIColor whiteColor]];
@@ -325,10 +324,7 @@
 
 -(IBAction)night:(id)sender{
 
-    NSUserDefaults *userDefaults2 = [NSUserDefaults standardUserDefaults];
-     [userDefaults2 setBool:NO forKey:@"btnM1"];
-    [userDefaults2 synchronize];
-    
+ 
     [_textView setOpaque:NO];
     [_textView setBackgroundColor:[UIColor blackColor]];
     _textView.textColor = [UIColor whiteColor];
