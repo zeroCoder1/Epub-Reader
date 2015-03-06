@@ -36,6 +36,16 @@
     
     
     
+    NSTextStorage *textStorage = [NSTextStorage new];
+    
+    NSLayoutManager *layoutManager = [NSLayoutManager new];
+    [textStorage addLayoutManager: layoutManager];
+    
+    NSTextContainer *textContainer = [NSTextContainer new];
+    [layoutManager addTextContainer: textContainer];
+
+
+    
     UISwipeGestureRecognizer *swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(swipeRightAction:)];
     swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
     swipeRight.delegate = self;
@@ -50,9 +60,7 @@
     _textView.textColor = color;
      isNightMode = NO;
     
-
     
-
 }
 
 
@@ -68,6 +76,7 @@
     NSString *zipPath = [[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"];
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
     [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath overwrite:YES password:nil error:nil];
+
 }
 
 /*Function Name : applicationDocumentsDirectory
@@ -100,9 +109,9 @@
 		NSLog(@"Parse now");
 
 		return strFilePath;
+
+
         
-
-
 	}
 	else {
 		
