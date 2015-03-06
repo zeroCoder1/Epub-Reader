@@ -35,17 +35,6 @@
 	[_xmlHandler parseXMLFileAt:[self getRootFilePath]];
     
     
-    
-    NSTextStorage *textStorage = [NSTextStorage new];
-    
-    NSLayoutManager *layoutManager = [NSLayoutManager new];
-    [textStorage addLayoutManager: layoutManager];
-    
-    NSTextContainer *textContainer = [NSTextContainer new];
-    [layoutManager addTextContainer: textContainer];
-
-
-    
     UISwipeGestureRecognizer *swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(swipeRightAction:)];
     swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
     swipeRight.delegate = self;
