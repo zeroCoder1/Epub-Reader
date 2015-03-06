@@ -48,7 +48,11 @@
 
     textFontSize = 14;
     _textView.textColor = color;
-  
+     isNightMode = NO;
+    
+
+    
+
 }
 
 
@@ -313,7 +317,7 @@
     [_textView setBackgroundColor:[UIColor whiteColor]];
     _textView.textColor = [UIColor blackColor];
     color = [UIColor blackColor];
-   
+    isNightMode = NO;
 }
 
 
@@ -325,7 +329,7 @@
     [_textView setBackgroundColor:[UIColor blackColor]];
     _textView.textColor = [UIColor whiteColor];
     color = [UIColor whiteColor];
-
+    isNightMode = YES;
 }
 
 
@@ -357,24 +361,33 @@
         [attributedString addAttribute:NSBackgroundColorAttributeName
                                  value:[UIColor yellowColor]
                                  range:matchRange];
+     
+
     }
-  
+    
     _textView.attributedText = attributedString;
+
+
+    if (isNightMode) {
+        self.textView.textColor = [UIColor whiteColor];
+
+    }else{
+        self.textView.textColor = [UIColor blackColor];
+    }
+    
+
+    
     [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
 
 
-
-    
-    
     [searchBar becomeFirstResponder];
 }
 
 
 - (IBAction)removeHighlightsB{
-    
-  //  [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_RemoveAllHighlights()"];  // to remove highlight
     [self loadPage];
-    [self.view endEditing:YES];
+
+   [self.view endEditing:YES];
 }
 
 

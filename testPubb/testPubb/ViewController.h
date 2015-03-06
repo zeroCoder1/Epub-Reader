@@ -27,7 +27,7 @@
     NSUInteger textFontSize;
     UIColor* color;
     
-    BOOL isInverted;
+    BOOL isNightMode;
 }
 
 
@@ -36,15 +36,18 @@
 @property (nonatomic, strong)NSString *_strFileName;
 
 @property (strong, nonatomic) IBOutlet UITextView *textView;
+@property (weak, nonatomic) IBOutlet UISearchBar *searchBar;
 
+@property (weak, nonatomic) IBOutlet UIToolbar *topToolbar;
 
+@property (weak, nonatomic) IBOutlet UIVibrancyEffect *vibrancyEffect;
 
 - (void)unzipAndSaveFile;
 - (NSString *)applicationDocumentsDirectory; 
 - (void)loadPage;
 - (NSString*)getRootFilePath;
 
-- (NSInteger)stringHighlight:(NSString*)str;
+
 - (IBAction)removeHighlightsB;
 
 
