@@ -172,8 +172,6 @@
 	//set page number
     NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
 
-    
-    
     dispatch_async(dispatch_get_main_queue(), ^{
         NSAttributedString *attributedString = [[NSAttributedString alloc] initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
         _textView.attributedText = attributedString;
@@ -333,63 +331,6 @@
 }
 
 
-- (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType{
-    
-    return YES;
-    
-}
-
-
-//- (void)webViewDidFinishLoad:(UIWebView *)webView{
-//    
-//    
-//    NSUserDefaults *menuUserDefaults = [NSUserDefaults standardUserDefaults];
-//
-//    if([menuUserDefaults boolForKey:@"btnM1"]){
-//        [_webview setOpaque:NO];
-//        [_webview setBackgroundColor:[UIColor whiteColor]];
-//        NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'black'"];
-//        [_webview stringByEvaluatingJavaScriptFromString:jsString2];
-//    
-//    }
-//    
-//    else{
-//        [_webview setOpaque:NO];
-//        [_webview setBackgroundColor:[UIColor blackColor]];
-//        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'white'"];
-//        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-//    
-//    }
-//    
-//    NSUserDefaults *menuUserDefaults2 = [NSUserDefaults standardUserDefaults];
-//    
-//    if([menuUserDefaults2 boolForKey:@"btnM2"]){
-//       
-//        textFontSize = (textFontSize < 140) ? textFontSize +2 : textFontSize;
-//        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-//        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-//        
-//    }
-//    
-//    else{
-//              
-//        textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
-//        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-//        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-//        
-//    }
-//    
-//    
-//    
-//}
-
-/*
- Search A string inside UIWebView with the use of the javascript function
- */
-
-
-
-
 - (void)removeHighlights{
     
    
@@ -465,13 +406,29 @@
 }
 
 
+//TextView Delegate
+- (BOOL)textView:(UITextView *)textView shouldInteractWithURL:(NSURL *)URL inRange:(NSRange)characterRange{
+    
+    _pagesPath=[NSString stringWithFormat:@"%@/%@",self._rootPath,[self._ePubContent._manifest valueForKey:[self._ePubContent._spine objectAtIndex:_pageNumber]]];
+    NSString * URLString = [NSString stringWithFormat:@"%@",URL];
+    NSString * lastPath = [URLString lastPathComponent];
+    NSString * firstPath = [_pagesPath stringByDeletingLastPathComponent];
+    
+    NSArray *myStrings = [[NSArray alloc] initWithObjects:firstPath, @"/", lastPath, nil];
+    NSString *joinedString = [myStrings componentsJoinedByString:@""];
+    
+    ///***** Should be a better method to do this ******///
+    NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:joinedString]] encoding:NSUTF8StringEncoding];
 
-//- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
-//{
-//    // Return YES for supported orientations
-// 
-//     [_webview reload];
-//       return YES;
-//}
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSAttributedString *attributedString = [[NSAttributedString alloc] initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
+        _textView.attributedText = attributedString;
+        _textView.font = [UIFont systemFontOfSize:textFontSize];
+        _textView.textColor = color;
+    });
+    
+    return YES;
+}
 
 @end
