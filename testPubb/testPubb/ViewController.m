@@ -63,8 +63,7 @@
 	
     NSString *zipPath = [[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"];
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
-    [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath];
-    
+    [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath overwrite:YES password:nil error:nil];
 }
 
 /*Function Name : applicationDocumentsDirectory
@@ -205,7 +204,6 @@
     
     //[animation setType:kcat]; 
     [animation setSubtype:@"fromRight"];
-    
 
     //[_webview reload];
     _pageNumber--;
