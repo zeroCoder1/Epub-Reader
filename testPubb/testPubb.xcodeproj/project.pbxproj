@@ -20,6 +20,7 @@
 		395817AA14E127B90032DBF2 /* libz.1.1.3.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 395817A914E127B90032DBF2 /* libz.1.1.3.dylib */; };
 		39D95FE8152DFD2200A602E4 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 39D95FE7152DFD2200A602E4 /* QuartzCore.framework */; };
 		8372DF0F1AA96FE7007F1911 /* moby-dick-20120118.epub in Resources */ = {isa = PBXBuildFile; fileRef = 8372DF0E1AA96FE7007F1911 /* moby-dick-20120118.epub */; };
+		8372DF111AA9B156007F1911 /* Default-568h@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 8372DF101AA9B156007F1911 /* Default-568h@2x.png */; };
 		83DF68C71AA84068006D49AE /* ioapi.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68BD1AA84068006D49AE /* ioapi.c */; };
 		83DF68C81AA84068006D49AE /* mztools.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68BF1AA84068006D49AE /* mztools.c */; };
 		83DF68C91AA84068006D49AE /* unzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68C11AA84068006D49AE /* unzip.c */; };
@@ -48,6 +49,7 @@
 		395817A914E127B90032DBF2 /* libz.1.1.3.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.1.1.3.dylib; path = usr/lib/libz.1.1.3.dylib; sourceTree = SDKROOT; };
 		39D95FE7152DFD2200A602E4 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		8372DF0E1AA96FE7007F1911 /* moby-dick-20120118.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "moby-dick-20120118.epub"; sourceTree = "<group>"; };
+		8372DF101AA9B156007F1911 /* Default-568h@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Default-568h@2x.png"; sourceTree = "<group>"; };
 		83DF68BC1AA84068006D49AE /* crypt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = crypt.h; sourceTree = "<group>"; };
 		83DF68BD1AA84068006D49AE /* ioapi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ioapi.c; sourceTree = "<group>"; };
 		83DF68BE1AA84068006D49AE /* ioapi.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ioapi.h; sourceTree = "<group>"; };
@@ -80,6 +82,7 @@
 		3958175C14E120FB0032DBF2 = {
 			isa = PBXGroup;
 			children = (
+				8372DF101AA9B156007F1911 /* Default-568h@2x.png */,
 				395817A914E127B90032DBF2 /* libz.1.1.3.dylib */,
 				3958177114E120FB0032DBF2 /* testPubb */,
 				3958176A14E120FB0032DBF2 /* Frameworks */,
@@ -221,6 +224,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8372DF0F1AA96FE7007F1911 /* moby-dick-20120118.epub in Resources */,
+				8372DF111AA9B156007F1911 /* Default-568h@2x.png in Resources */,
 				3958177614E120FB0032DBF2 /* InfoPlist.strings in Resources */,
 				3958178214E120FB0032DBF2 /* ViewController.xib in Resources */,
 			);
@@ -349,6 +353,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				WRAPPER_EXTENSION = app;
 			};
 			name = Debug;
@@ -364,6 +369,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				WRAPPER_EXTENSION = app;
 			};
 			name = Release;

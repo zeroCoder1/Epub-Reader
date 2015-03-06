@@ -184,7 +184,7 @@
     
    //
     
-    
+    NSLog(@"The htmlString to pages %@",htmlString);
     
     _pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
     
