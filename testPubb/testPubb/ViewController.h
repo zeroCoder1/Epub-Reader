@@ -34,6 +34,7 @@
 
     CGRect textViewFrame;
     CGSize columnSize;
+    BOOL isLandscape;
 }
 
 

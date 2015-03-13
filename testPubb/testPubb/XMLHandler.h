@@ -1,3 +1,10 @@
+//
+//  XMLHandler.h
+//  testPubb
+//
+//  Created by Shrutesh on 07/02/12.
+//  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
+//
 
 
 #import <Foundation/Foundation.h>
@@ -15,12 +22,12 @@
 
 	NSXMLParser *_parser;
 	NSString *_rootPath;
-	id<XMLHandlerDelegate> delegate;
+//	id<XMLHandlerDelegate> delegate;
 	EpubContent *_epubContent;
 	NSMutableDictionary *_itemdictionary;
 	NSMutableArray *_spinearray;
 }
 
-@property (nonatomic, retain) id<XMLHandlerDelegate> delegate;
+@property (nonatomic, weak) id<XMLHandlerDelegate> delegate;
 - (void)parseXMLFileAt:(NSString*)strPath;
 @end

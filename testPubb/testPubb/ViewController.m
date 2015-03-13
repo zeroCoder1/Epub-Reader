@@ -200,7 +200,7 @@
         
         if (self.view.frame.size.width > self.view.frame.size.height) {
             NSLog(@"is landscape");
-            
+            isLandscape = YES;
             textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
             columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
 
@@ -217,6 +217,7 @@
         [_layoutManager addTextContainer:textContainer];
         _textView = [[UITextView alloc] initWithFrame:textViewFrame
                                                    textContainer:textContainer];
+        
         _textView.scrollEnabled = NO;
         _textView.font = [UIFont systemFontOfSize:textFontSize];
         _textView.editable = NO;
@@ -323,8 +324,8 @@
 
 
 
-- (IBAction)next:(id)ignored
-{
+- (IBAction)next:(id)ignored{
+    
     if (_pageNumber < [self._ePubContent._spine count]-1 ) {
 
     
@@ -344,7 +345,7 @@
 }
 
 
--(IBAction)plusA:(id)sender{
+- (IBAction)plusA:(id)sender{
     
     textFontSize = (textFontSize < 50) ? textFontSize +2 : textFontSize;
     [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
@@ -354,8 +355,7 @@
 
 
 
--(IBAction)minusA:(id)sender{
-
+- (IBAction)minusA:(id)sender{
     textFontSize = (textFontSize > 14) ? textFontSize -2 : textFontSize;
    [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
 
@@ -364,29 +364,21 @@
 }
 
 
--(IBAction)day:(id)sender{
-    
-
-    
+- (IBAction)day:(id)sender{
     isNightMode = NO;
     [self loadPage];
-
 }
 
 
 
--(IBAction)night:(id)sender{
-
-
+- (IBAction)night:(id)sender{
     isNightMode = YES;
     [self loadPage];
-   
-    
-
 }
 
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    
     float edge = scrollView.contentOffset.x + scrollView.frame.size.width;
     if (edge >= scrollView.contentSize.width) {
         
