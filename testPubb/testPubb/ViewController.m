@@ -173,30 +173,21 @@
 	_pagesPath=[NSString stringWithFormat:@"%@/%@",self._rootPath,[self._ePubContent._manifest valueForKey:[self._ePubContent._spine objectAtIndex:_pageNumber]]];
 	//[_webview loadRequest:[NSURLRequest requestWithURL:[NSURL fileURLWithPath:_pagesPath]]];
 	//set page number
+    
+    
+    
     NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
-
     dispatch_async(dispatch_get_main_queue(), ^{
-//        NSAttributedString *attributedString = [[NSAttributedString alloc] initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
-//        _textView.attributedText = attributedString;
-//        _textView.font = [UIFont systemFontOfSize:textFontSize];
-//        _textView.textColor = color;
-        
         _textStorage = [[NSTextStorage alloc]initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
-        
         _layoutManager = [[NSLayoutManager alloc]init];
         [_textStorage addLayoutManager:_layoutManager];
         [self layoutTextContainers];
         
     });
     
-   //
-    
-    NSLog(@"The htmlString to pages %@",htmlString);
-    
     _pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
     
    
-    
 }
 
 
@@ -205,8 +196,21 @@
     NSUInteger lastRenderedGlyph = 0;
     CGFloat currentXOffset = 0;
     while (lastRenderedGlyph < _layoutManager.numberOfGlyphs) {
-        CGRect textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
-        CGSize columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+        
+        if (self.view.frame.size.width > self.view.frame.size.height) {
+            NSLog(@"is landscape");
+            
+            textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
+            columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+
+        }else{
+            NSLog(@"is portrait");
+            
+            textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds), CGRectGetHeight(self.scrollView.bounds));
+            columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+
+        }
+        
         
         NSTextContainer *textContainer = [[NSTextContainer alloc] initWithSize:columnSize];
         [_layoutManager addTextContainer:textContainer];
@@ -487,5 +491,18 @@
     
     return YES;
 }
+
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator{
+    
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    
+    [self loadPage];
+
+}
+
+
+
+
+
 
 @end

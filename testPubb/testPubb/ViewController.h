@@ -32,6 +32,8 @@
     BOOL isNightMode;
     
 
+    CGRect textViewFrame;
+    CGSize columnSize;
 }
 
 
