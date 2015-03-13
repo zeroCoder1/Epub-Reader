@@ -11,7 +11,9 @@
 #import "XMLHandler.h"
 #import <QuartzCore/QuartzCore.h>
 
-@interface ViewController : UIViewController<XMLHandlerDelegate,UIGestureRecognizerDelegate,UIWebViewDelegate,UISearchBarDelegate>{
+
+
+@interface ViewController : UIViewController<XMLHandlerDelegate,UIGestureRecognizerDelegate,UIWebViewDelegate,UISearchBarDelegate, NSLayoutManagerDelegate>{
     
     
     IBOutlet UILabel *_pageNumberLbl;
@@ -28,6 +30,8 @@
     UIColor* color;
     
     BOOL isNightMode;
+    
+
 }
 
 
@@ -40,7 +44,10 @@
 
 @property (weak, nonatomic) IBOutlet UIToolbar *topToolbar;
 
-@property (weak, nonatomic) IBOutlet UIVibrancyEffect *vibrancyEffect;
+@property (weak, nonatomic) IBOutlet UIScrollView *scrollView;
+
+
+
 
 - (void)unzipAndSaveFile;
 - (NSString *)applicationDocumentsDirectory; 
@@ -58,6 +65,9 @@
 
 - (IBAction)next:(id)ignored;
 - (IBAction)prev:(id)ignored;
+
+@property (nonatomic, retain) NSTextStorage *textStorage;
+@property (nonatomic, retain) NSLayoutManager *layoutManager;
 
 
 @end

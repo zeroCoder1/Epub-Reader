@@ -10,6 +10,8 @@
 #import "SSZipArchive.h"
 
 
+
+
 @implementation ViewController
 @synthesize _ePubContent;
 @synthesize _rootPath;
@@ -174,10 +176,17 @@
     NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSAttributedString *attributedString = [[NSAttributedString alloc] initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
-        _textView.attributedText = attributedString;
-        _textView.font = [UIFont systemFontOfSize:textFontSize];
-        _textView.textColor = color;
+//        NSAttributedString *attributedString = [[NSAttributedString alloc] initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
+//        _textView.attributedText = attributedString;
+//        _textView.font = [UIFont systemFontOfSize:textFontSize];
+//        _textView.textColor = color;
+        
+        _textStorage = [[NSTextStorage alloc]initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
+        
+        _layoutManager = [[NSLayoutManager alloc]init];
+        [_textStorage addLayoutManager:_layoutManager];
+        [self layoutTextContainers];
+        
     });
     
    //
@@ -186,12 +195,42 @@
     
     _pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
     
-    
+   
     
 }
 
 
+- (void)layoutTextContainers{
+    
+    NSUInteger lastRenderedGlyph = 0;
+    CGFloat currentXOffset = 0;
+    while (lastRenderedGlyph < _layoutManager.numberOfGlyphs) {
+        CGRect textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
+        CGSize columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+        
+        NSTextContainer *textContainer = [[NSTextContainer alloc] initWithSize:columnSize];
+        [_layoutManager addTextContainer:textContainer];
+        _textView = [[UITextView alloc] initWithFrame:textViewFrame
+                                                   textContainer:textContainer];
+        _textView.scrollEnabled = NO;
+        _textView.font = [UIFont systemFontOfSize:textFontSize];
+        _textView.textColor = color;
 
+        [self.scrollView addSubview:_textView];
+        
+        // Increase the current offset
+        currentXOffset += CGRectGetWidth(textViewFrame);
+        
+        // And find the index of the glyph we've just rendered
+        lastRenderedGlyph = NSMaxRange([_layoutManager glyphRangeForTextContainer:textContainer]);
+    }
+    
+    // Need to update the scrollView size
+    CGSize contentSize = CGSizeMake(currentXOffset, CGRectGetHeight(self.scrollView.bounds));
+    self.scrollView.contentSize = contentSize;
+
+    
+}
 
 
 - (void)swipeRightAction:(id)ignored{
@@ -211,6 +250,7 @@
     _pageNumber--;
     [self loadPage];
     [[_textView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
+          _textView.scrollsToTop = YES;
   }
 
 }
@@ -238,7 +278,7 @@
     [self loadPage];
     
     [[_textView layer] addAnimation:animation forKey:@"WebPageCurl"];
-
+        _textView.scrollsToTop = YES;
     }
 
 }
@@ -311,7 +351,7 @@
     
 
     
-    [_textView setOpaque:NO];
+
     [_textView setBackgroundColor:[UIColor whiteColor]];
     _textView.textColor = [UIColor blackColor];
     color = [UIColor blackColor];
@@ -323,11 +363,14 @@
 -(IBAction)night:(id)sender{
 
  
-    [_textView setOpaque:NO];
+
     [_textView setBackgroundColor:[UIColor blackColor]];
     _textView.textColor = [UIColor whiteColor];
     color = [UIColor whiteColor];
+    
     isNightMode = YES;
+    
+
 }
 
 

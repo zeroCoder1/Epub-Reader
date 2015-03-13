@@ -19,6 +19,7 @@
 		395817A314E122220032DBF2 /* XMLHandler.m in Sources */ = {isa = PBXBuildFile; fileRef = 395817A214E122220032DBF2 /* XMLHandler.m */; };
 		395817AA14E127B90032DBF2 /* libz.1.1.3.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 395817A914E127B90032DBF2 /* libz.1.1.3.dylib */; };
 		39D95FE8152DFD2200A602E4 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 39D95FE7152DFD2200A602E4 /* QuartzCore.framework */; };
+		83712C9B1AAD5AFB00104DF4 /* libxml2.2.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 83712C9A1AAD5AFB00104DF4 /* libxml2.2.dylib */; };
 		8372DF0F1AA96FE7007F1911 /* moby-dick-20120118.epub in Resources */ = {isa = PBXBuildFile; fileRef = 8372DF0E1AA96FE7007F1911 /* moby-dick-20120118.epub */; };
 		8372DF111AA9B156007F1911 /* Default-568h@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 8372DF101AA9B156007F1911 /* Default-568h@2x.png */; };
 		83DF68C71AA84068006D49AE /* ioapi.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68BD1AA84068006D49AE /* ioapi.c */; };
@@ -48,6 +49,7 @@
 		395817A214E122220032DBF2 /* XMLHandler.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = XMLHandler.m; sourceTree = "<group>"; };
 		395817A914E127B90032DBF2 /* libz.1.1.3.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libz.1.1.3.dylib; path = usr/lib/libz.1.1.3.dylib; sourceTree = SDKROOT; };
 		39D95FE7152DFD2200A602E4 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		83712C9A1AAD5AFB00104DF4 /* libxml2.2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libxml2.2.dylib; path = usr/lib/libxml2.2.dylib; sourceTree = SDKROOT; };
 		8372DF0E1AA96FE7007F1911 /* moby-dick-20120118.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "moby-dick-20120118.epub"; sourceTree = "<group>"; };
 		8372DF101AA9B156007F1911 /* Default-568h@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Default-568h@2x.png"; sourceTree = "<group>"; };
 		83DF68BC1AA84068006D49AE /* crypt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = crypt.h; sourceTree = "<group>"; };
@@ -68,6 +70,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				83712C9B1AAD5AFB00104DF4 /* libxml2.2.dylib in Frameworks */,
 				39D95FE8152DFD2200A602E4 /* QuartzCore.framework in Frameworks */,
 				395817AA14E127B90032DBF2 /* libz.1.1.3.dylib in Frameworks */,
 				3958176C14E120FB0032DBF2 /* UIKit.framework in Frameworks */,
@@ -83,7 +86,6 @@
 			isa = PBXGroup;
 			children = (
 				8372DF101AA9B156007F1911 /* Default-568h@2x.png */,
-				395817A914E127B90032DBF2 /* libz.1.1.3.dylib */,
 				3958177114E120FB0032DBF2 /* testPubb */,
 				3958176A14E120FB0032DBF2 /* Frameworks */,
 				3958176814E120FB0032DBF2 /* Products */,
@@ -101,6 +103,8 @@
 		3958176A14E120FB0032DBF2 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				395817A914E127B90032DBF2 /* libz.1.1.3.dylib */,
+				83712C9A1AAD5AFB00104DF4 /* libxml2.2.dylib */,
 				39D95FE7152DFD2200A602E4 /* QuartzCore.framework */,
 				3958176B14E120FB0032DBF2 /* UIKit.framework */,
 				3958176D14E120FB0032DBF2 /* Foundation.framework */,
@@ -349,6 +353,11 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "testPubb/testPubb-Prefix.pch";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"$(SDKROOT)/usr/include/libxml2",
+				);
 				INFOPLIST_FILE = "testPubb/testPubb-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -365,6 +374,11 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "testPubb/testPubb-Prefix.pch";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"$(SDKROOT)/usr/include/libxml2",
+				);
 				INFOPLIST_FILE = "testPubb/testPubb-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 8.1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
