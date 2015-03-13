@@ -214,8 +214,17 @@
                                                    textContainer:textContainer];
         _textView.scrollEnabled = NO;
         _textView.font = [UIFont systemFontOfSize:textFontSize];
-        _textView.textColor = color;
+        if (isNightMode) {
+            _textView.textColor = [UIColor whiteColor];
+            _textView.backgroundColor = [UIColor blackColor];
 
+        }else{
+            
+            _textView.textColor = [UIColor blackColor];
+            _textView.backgroundColor = [UIColor whiteColor];
+
+        }
+        
         [self.scrollView addSubview:_textView];
         
         // Increase the current offset
@@ -250,7 +259,7 @@
     _pageNumber--;
     [self loadPage];
     [[_textView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
-          _textView.scrollsToTop = YES;
+
   }
 
 }
@@ -278,7 +287,7 @@
     [self loadPage];
     
     [[_textView layer] addAnimation:animation forKey:@"WebPageCurl"];
-        _textView.scrollsToTop = YES;
+
     }
 
 }
@@ -299,7 +308,7 @@
    // [_webview reload];
     _pageNumber--;
     [self loadPage];
-    [[_textView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
+    [[_scrollView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
     
     }
 }
@@ -320,7 +329,7 @@
     _pageNumber++;
     [self loadPage];
     
-    [[_textView layer] addAnimation:animation forKey:@"WebPageCurl"];
+    [[_scrollView layer] addAnimation:animation forKey:@"WebPageCurl"];
 
     }
     
@@ -333,7 +342,7 @@
     textFontSize = (textFontSize < 50) ? textFontSize +2 : textFontSize;
     [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
     
-
+    [self loadPage];
 }
 
 
@@ -343,6 +352,7 @@
     textFontSize = (textFontSize > 14) ? textFontSize -2 : textFontSize;
    [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
 
+    [self loadPage];
 
 }
 
@@ -351,24 +361,19 @@
     
 
     
-
-    [_textView setBackgroundColor:[UIColor whiteColor]];
-    _textView.textColor = [UIColor blackColor];
-    color = [UIColor blackColor];
     isNightMode = NO;
+    [self loadPage];
+
 }
 
 
 
 -(IBAction)night:(id)sender{
 
- 
 
-    [_textView setBackgroundColor:[UIColor blackColor]];
-    _textView.textColor = [UIColor whiteColor];
-    color = [UIColor whiteColor];
-    
     isNightMode = YES;
+    [self loadPage];
+   
     
 
 }
@@ -410,15 +415,15 @@
 
 
     if (isNightMode) {
-        self.textView.textColor = [UIColor whiteColor];
+        _textView.textColor = [UIColor whiteColor];
 
     }else{
-        self.textView.textColor = [UIColor blackColor];
+        _textView.textColor = [UIColor blackColor];
     }
     
 
     
-    [self.textView setFont:[UIFont systemFontOfSize:textFontSize]];
+    [_textView setFont:[UIFont systemFontOfSize:textFontSize]];
 
 
     [searchBar becomeFirstResponder];
