@@ -36,20 +36,21 @@
 	_xmlHandler.delegate=self;
 	[_xmlHandler parseXMLFileAt:[self getRootFilePath]];
     
+    _swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(swipeRightAction:)];
+    _swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
+    _swipeRight.delegate = self;
+    _swipeRight.enabled = NO;
+    [_scrollView addGestureRecognizer:_swipeRight];
     
-    UISwipeGestureRecognizer *swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(swipeRightAction:)];
-    swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
-    swipeRight.delegate = self;
-    [_textView addGestureRecognizer:swipeRight];
-    
-    UISwipeGestureRecognizer *swipeLeft = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(swipeLeftAction:)];
-    swipeLeft.direction = UISwipeGestureRecognizerDirectionLeft;
-    swipeLeft.delegate = self;
-    [_textView addGestureRecognizer:swipeLeft];
+    _swipeLeft = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(swipeLeftAction:)];
+    _swipeLeft.direction = UISwipeGestureRecognizerDirectionLeft;
+    _swipeLeft.delegate = self;
+    _swipeLeft.enabled = NO;
+    [_scrollView addGestureRecognizer:_swipeLeft];
 
     textFontSize = 14;
     _textView.textColor = color;
-     isNightMode = NO;
+    isNightMode = NO;
     
     
 }
@@ -218,6 +219,8 @@
                                                    textContainer:textContainer];
         _textView.scrollEnabled = NO;
         _textView.font = [UIFont systemFontOfSize:textFontSize];
+        _textView.editable = NO;
+        
         if (isNightMode) {
             _textView.textColor = [UIColor whiteColor];
             _textView.backgroundColor = [UIColor blackColor];
@@ -313,7 +316,8 @@
     _pageNumber--;
     [self loadPage];
     [[_scrollView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
-    
+        [self.scrollView setContentOffset:CGPointMake(0, self.scrollView.contentOffset.y) animated:NO];
+
     }
 }
 
@@ -332,12 +336,11 @@
     //[_webview reload];
     _pageNumber++;
     [self loadPage];
-    
     [[_scrollView layer] addAnimation:animation forKey:@"WebPageCurl"];
+        [self.scrollView setContentOffset:CGPointMake(0, self.scrollView.contentOffset.y) animated:NO];
 
     }
-    
-    
+
 }
 
 
@@ -383,10 +386,12 @@
 }
 
 
-- (void)removeHighlights{
-    
-   
-   // [_webview stringByEvaluatingJavaScriptFromString:@"uiWebview_RemoveAllHighlights()"];  // to remove highlight
+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView {
+    float edge = scrollView.contentOffset.x + scrollView.frame.size.width;
+    if (edge >= scrollView.contentSize.width) {
+        
+        NSLog(@"end");
+    }
 }
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
@@ -487,6 +492,7 @@
         _textView.attributedText = attributedString;
         _textView.font = [UIFont systemFontOfSize:textFontSize];
         _textView.textColor = color;
+
     });
     
     return YES;

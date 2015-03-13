@@ -13,7 +13,7 @@
 
 
 
-@interface ViewController : UIViewController<XMLHandlerDelegate,UIGestureRecognizerDelegate,UIWebViewDelegate,UISearchBarDelegate, NSLayoutManagerDelegate>{
+@interface ViewController : UIViewController<XMLHandlerDelegate,UIGestureRecognizerDelegate,UIWebViewDelegate,UISearchBarDelegate, NSLayoutManagerDelegate, UIScrollViewDelegate>{
     
     
     IBOutlet UILabel *_pageNumberLbl;
@@ -68,8 +68,11 @@
 - (IBAction)next:(id)ignored;
 - (IBAction)prev:(id)ignored;
 
-@property (nonatomic, retain) NSTextStorage *textStorage;
-@property (nonatomic, retain) NSLayoutManager *layoutManager;
+@property (nonatomic, strong) NSTextStorage *textStorage;
+@property (nonatomic, strong) NSLayoutManager *layoutManager;
+
+@property (nonatomic, strong) UISwipeGestureRecognizer *swipeRight;
+@property (nonatomic, strong) UISwipeGestureRecognizer *swipeLeft;
 
 
 @end
