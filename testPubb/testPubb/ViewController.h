@@ -76,4 +76,6 @@
 @property (nonatomic, strong) UISwipeGestureRecognizer *swipeLeft;
 
 
+
+@property (strong, nonatomic) NSArray *textOrigins;
 @end

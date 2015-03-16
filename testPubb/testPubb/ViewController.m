@@ -18,6 +18,7 @@
 @synthesize _strFileName;
 
 
+
 - (void)didReceiveMemoryWarning
 {
     [super didReceiveMemoryWarning];
@@ -169,12 +170,11 @@
  */
 
 - (void)loadPage{
-   
+  
 	
 	_pagesPath=[NSString stringWithFormat:@"%@/%@",self._rootPath,[self._ePubContent._manifest valueForKey:[self._ePubContent._spine objectAtIndex:_pageNumber]]];
 	//[_webview loadRequest:[NSURLRequest requestWithURL:[NSURL fileURLWithPath:_pagesPath]]];
 	//set page number
-    
     
     
     NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
@@ -194,52 +194,74 @@
 
 - (void)layoutTextContainers{
     
+    
+    
     NSUInteger lastRenderedGlyph = 0;
     CGFloat currentXOffset = 0;
-    while (lastRenderedGlyph < _layoutManager.numberOfGlyphs) {
-        
-        if (self.view.frame.size.width > self.view.frame.size.height) {
-            NSLog(@"is landscape");
-            isLandscape = YES;
-            textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
-            columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+   
+    
 
-        }else{
-            NSLog(@"is portrait");
-            
+    
+    
+    while (lastRenderedGlyph < _layoutManager.numberOfGlyphs) {
+       
+        
+
+        
+      //  NSLog(@"lastRenderedGlyph = %lu",(unsigned long)lastRenderedGlyph);
+        //NSLog(@"_layoutManager.numberOfGlyphs = %lu",(unsigned long)_layoutManager.numberOfGlyphs);
+
+        
+//        if (self.view.frame.size.width > self.view.frame.size.height) {
+//
+//            isLandscape = YES;
+//            textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
+//            columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+//
+//        }else{
+
             textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds), CGRectGetHeight(self.scrollView.bounds));
             columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
 
-        }
+        //}
         
         
         NSTextContainer *textContainer = [[NSTextContainer alloc] initWithSize:columnSize];
         [_layoutManager addTextContainer:textContainer];
         _textView = [[UITextView alloc] initWithFrame:textViewFrame
                                                    textContainer:textContainer];
-        
         _textView.scrollEnabled = NO;
         _textView.font = [UIFont systemFontOfSize:textFontSize];
         _textView.editable = NO;
+
         
+        [self.scrollView addSubview:_textView];
+        
+    
+        NSLog(@"array count is %d", [self.layoutManager.textContainers count]);
+
+        
+
         if (isNightMode) {
             _textView.textColor = [UIColor whiteColor];
             _textView.backgroundColor = [UIColor blackColor];
-
+            
         }else{
             
             _textView.textColor = [UIColor blackColor];
             _textView.backgroundColor = [UIColor whiteColor];
-
+            
         }
-        
-        [self.scrollView addSubview:_textView];
         
         // Increase the current offset
         currentXOffset += CGRectGetWidth(textViewFrame);
         
         // And find the index of the glyph we've just rendered
         lastRenderedGlyph = NSMaxRange([_layoutManager glyphRangeForTextContainer:textContainer]);
+        
+        //NSRange glyphRange = [self.layoutManager glyphRangeForTextContainer:textContainer];
+
+
     }
     
     // Need to update the scrollView size
@@ -270,6 +292,10 @@
 
   }
 
+    for (UITextView*tv in self.scrollView.subviews) {
+        [tv removeFromSuperview];
+    }
+    
 }
 
 
@@ -297,6 +323,9 @@
     [[_textView layer] addAnimation:animation forKey:@"WebPageCurl"];
 
     }
+    for (UITextView*tv in self.scrollView.subviews) {
+        [tv removeFromSuperview];
+    }
 
 }
 
@@ -319,6 +348,10 @@
     [[_scrollView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
         [self.scrollView setContentOffset:CGPointMake(0, self.scrollView.contentOffset.y) animated:NO];
 
+
+    }
+    for (UITextView*tv in self.scrollView.subviews) {
+        [tv removeFromSuperview];
     }
 }
 
@@ -342,6 +375,9 @@
 
     }
 
+    for (UITextView*tv in self.scrollView.subviews) {
+        [tv removeFromSuperview];
+    }
 }
 
 

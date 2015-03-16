@@ -5,7 +5,7 @@
 	<key>IDESourceControlProjectFavoriteDictionaryKey</key>
 	<false/>
 	<key>IDESourceControlProjectIdentifier</key>
-	<string>157005D0-1163-4FB9-959A-9BD7B64C37AB</string>
+	<string>370CFAAD-D2CD-4AEC-9764-F6829687B5A9</string>
 	<key>IDESourceControlProjectName</key>
 	<string>testPubb</string>
 	<key>IDESourceControlProjectOriginsDictionary</key>
@@ -34,7 +34,7 @@
 			<key>IDESourceControlWCCIdentifierKey</key>
 			<string>A433C5197F32069ABC650AB236F2C1FE5A84B158</string>
 			<key>IDESourceControlWCCName</key>
-			<string>Epub-Reader</string>
+			<string>Experimental</string>
 		</dict>
 	</array>
 </dict>
