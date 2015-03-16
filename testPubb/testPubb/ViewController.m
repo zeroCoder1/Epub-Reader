@@ -212,18 +212,32 @@
         //NSLog(@"_layoutManager.numberOfGlyphs = %lu",(unsigned long)_layoutManager.numberOfGlyphs);
 
         
-//        if (self.view.frame.size.width > self.view.frame.size.height) {
-//
-//            isLandscape = YES;
-//            textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
-//            columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
-//
-//        }else{
+        if (self.view.frame.size.width > self.view.frame.size.height) {
 
-            textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds), CGRectGetHeight(self.scrollView.bounds));
-            columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+            isLandscape = YES;
+            [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+                textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
+                columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
 
-        //}
+            } completion:^(BOOL finished) {
+                
+            }];
+            
+
+        }else{
+
+            [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+                
+                textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds), CGRectGetHeight(self.scrollView.bounds));
+                columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
+
+            } completion:^(BOOL finished) {
+                
+            }];
+            
+            
+
+        }
         
         
         NSTextContainer *textContainer = [[NSTextContainer alloc] initWithSize:columnSize];
@@ -231,14 +245,15 @@
         _textView = [[UITextView alloc] initWithFrame:textViewFrame
                                                    textContainer:textContainer];
         _textView.scrollEnabled = NO;
+        _textView.delegate = self;
         _textView.font = [UIFont systemFontOfSize:textFontSize];
         _textView.editable = NO;
+        _textView.selectable = YES;
 
         
         [self.scrollView addSubview:_textView];
         
     
-        NSLog(@"array count is %d", [self.layoutManager.textContainers count]);
 
         
 
@@ -271,6 +286,13 @@
     
 }
 
+
+- (void)textViewDidChangeSelection:(UITextView *)textView {
+    
+    UITextRange *selectedRange = [textView selectedTextRange];
+    NSString *selectedText = [textView textInRange:selectedRange];
+    NSLog(@"selected text is %@",selectedText);
+}
 
 - (void)swipeRightAction:(id)ignored{
     

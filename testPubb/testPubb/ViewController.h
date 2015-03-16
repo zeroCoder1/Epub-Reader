@@ -13,7 +13,7 @@
 
 
 
-@interface ViewController : UIViewController<XMLHandlerDelegate,UIGestureRecognizerDelegate,UIWebViewDelegate,UISearchBarDelegate, NSLayoutManagerDelegate, UIScrollViewDelegate>{
+@interface ViewController : UIViewController<XMLHandlerDelegate,UIGestureRecognizerDelegate,UITextViewDelegate,UISearchBarDelegate, NSLayoutManagerDelegate, UIScrollViewDelegate>{
     
     
     IBOutlet UILabel *_pageNumberLbl;
@@ -42,7 +42,7 @@
 @property (nonatomic, strong)NSString *_rootPath;
 @property (nonatomic, strong)NSString *_strFileName;
 
-@property (strong, nonatomic) IBOutlet UITextView *textView;
+@property (strong, nonatomic) UITextView *textView;
 @property (weak, nonatomic) IBOutlet UISearchBar *searchBar;
 
 @property (weak, nonatomic) IBOutlet UIToolbar *topToolbar;
