@@ -66,7 +66,7 @@
 
 - (void)unzipAndSaveFile{
 	
-    NSString *zipPath = [[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"];
+    NSString *zipPath = [[NSBundle mainBundle] pathForResource:@"BHNS" ofType:@"epub"];
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
     [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath overwrite:YES password:nil error:nil];
 
@@ -176,14 +176,60 @@
 	//[_webview loadRequest:[NSURLRequest requestWithURL:[NSURL fileURLWithPath:_pagesPath]]];
 	//set page number
     
-    
+    stringArray = [[NSMutableArray alloc]init];
+    orignialArray = [[NSMutableArray alloc]init];
+
+
     NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
     dispatch_async(dispatch_get_main_queue(), ^{
-        _textStorage = [[NSTextStorage alloc]initWithData:[htmlString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
+    
+        NSError *error = NULL;
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(<img\\s[\\s\\S]*?src\\s*?=\\s*?['\"](.*?)['\"][\\s\\S]*?>)+?"
+                                                                               options:NSRegularExpressionCaseInsensitive
+                                                                                 error:&error];
+        
+        [regex enumerateMatchesInString:htmlString
+                                options:0
+                                  range:NSMakeRange(0, [htmlString length])
+                             usingBlock:^(NSTextCheckingResult *result, NSMatchingFlags flags, BOOL *stop) {
+                                 
+                                 _originalImageString = [htmlString substringWithRange:[result rangeAtIndex:2]];
+                                 
+                                 [orignialArray addObject:_originalImageString];
+                                 
+                                 
+                                 NSArray *myStrings = [[NSArray alloc] initWithObjects:[_pagesPath stringByDeletingLastPathComponent], @"/", _originalImageString, nil];
+                                 _joinedString = [myStrings componentsJoinedByString:@""];
+                                 
+                                 [stringArray addObject:[NSString stringWithFormat:@"file://%@",_joinedString]];
+                                 
+                             }];
+        
+        
+        _outputString = htmlString;
+        
+
+        if (_originalImageString) {
+            for (int i= 0; i< [stringArray count]; i++) {
+                
+                _outputString = [_outputString stringByReplacingOccurrencesOfString:[orignialArray objectAtIndex:i] withString:[stringArray objectAtIndex:i]];
+
+                
+//                NSString *docsFolder = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
+//                NSString *filename = [docsFolder stringByAppendingPathComponent:@"sample.html"];
+//                NSError *error;
+//                [_outputString writeToFile:filename atomically:NO encoding:NSUTF8StringEncoding error:&error];
+            }
+        }else{
+            _outputString = [NSString stringWithString:htmlString];
+        }
+
+
+        _textStorage = [[NSTextStorage alloc]initWithData:[_outputString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
         _layoutManager = [[NSLayoutManager alloc]init];
         [_textStorage addLayoutManager:_layoutManager];
-        [self layoutTextContainers];
         
+        [self layoutTextContainers];
     });
     
     _pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
@@ -194,78 +240,43 @@
 
 - (void)layoutTextContainers{
     
-    
-    
     NSUInteger lastRenderedGlyph = 0;
     CGFloat currentXOffset = 0;
    
-    
-
-    
-    
     while (lastRenderedGlyph < _layoutManager.numberOfGlyphs) {
-       
-        
-
-        
-      //  NSLog(@"lastRenderedGlyph = %lu",(unsigned long)lastRenderedGlyph);
-        //NSLog(@"_layoutManager.numberOfGlyphs = %lu",(unsigned long)_layoutManager.numberOfGlyphs);
-
-        
         if (self.view.frame.size.width > self.view.frame.size.height) {
-
             isLandscape = YES;
-            [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
                 textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds) / 2, CGRectGetHeight(self.scrollView.bounds));
                 columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
 
-            } completion:^(BOOL finished) {
-                
-            }];
-            
-
         }else{
 
-            [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
-                
                 textViewFrame = CGRectMake(currentXOffset, 0, CGRectGetWidth(self.scrollView.bounds), CGRectGetHeight(self.scrollView.bounds));
                 columnSize = CGSizeMake(CGRectGetWidth(textViewFrame) - 20,CGRectGetHeight(textViewFrame) - 10);
-
-            } completion:^(BOOL finished) {
-                
-            }];
-            
-            
 
         }
         
         
         NSTextContainer *textContainer = [[NSTextContainer alloc] initWithSize:columnSize];
         [_layoutManager addTextContainer:textContainer];
-        _textView = [[UITextView alloc] initWithFrame:textViewFrame
-                                                   textContainer:textContainer];
+        _textView = [[UITextView alloc] initWithFrame:textViewFrame textContainer:textContainer];
+        
         _textView.scrollEnabled = NO;
         _textView.delegate = self;
         _textView.font = [UIFont systemFontOfSize:textFontSize];
         _textView.editable = NO;
         _textView.selectable = YES;
 
-        
+    
         [self.scrollView addSubview:_textView];
         
-    
-
-        
-
         if (isNightMode) {
-            _textView.textColor = [UIColor whiteColor];
-            _textView.backgroundColor = [UIColor blackColor];
-            
+                _textView.textColor = [UIColor whiteColor];
+                _textView.backgroundColor = [UIColor blackColor];
         }else{
             
-            _textView.textColor = [UIColor blackColor];
-            _textView.backgroundColor = [UIColor whiteColor];
-            
+                _textView.textColor = [UIColor blackColor];
+                _textView.backgroundColor = [UIColor whiteColor];
         }
         
         // Increase the current offset
@@ -276,7 +287,7 @@
         
         //NSRange glyphRange = [self.layoutManager glyphRangeForTextContainer:textContainer];
 
-
+        
     }
     
     // Need to update the scrollView size
@@ -471,6 +482,7 @@
     }
     
     _textView.attributedText = attributedString;
+
 
 
     if (isNightMode) {

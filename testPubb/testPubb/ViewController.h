@@ -35,6 +35,12 @@
     CGRect textViewFrame;
     CGSize columnSize;
     BOOL isLandscape;
+    
+  
+    NSMutableDictionary * dict;
+    NSMutableArray *stringArray;
+    NSMutableArray *orignialArray;
+  
 }
 
 
@@ -72,10 +78,19 @@
 @property (nonatomic, strong) NSTextStorage *textStorage;
 @property (nonatomic, strong) NSLayoutManager *layoutManager;
 
+
+
+
 @property (nonatomic, strong) UISwipeGestureRecognizer *swipeRight;
 @property (nonatomic, strong) UISwipeGestureRecognizer *swipeLeft;
 
 
 
 @property (strong, nonatomic) NSArray *textOrigins;
+
+@property (strong, nonatomic)  NSString * originalImageString;
+@property (strong, nonatomic) NSString *joinedString;
+@property (strong, nonatomic) NSString *outputString;
+
+
 @end
