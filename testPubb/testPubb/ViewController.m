@@ -66,7 +66,7 @@
 
 - (void)unzipAndSaveFile{
 	
-    NSString *zipPath = [[NSBundle mainBundle] pathForResource:@"BHNS" ofType:@"epub"];
+    NSString *zipPath = [[NSBundle mainBundle] pathForResource:@"moby-dick-20120118" ofType:@"epub"];
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
     [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath overwrite:YES password:nil error:nil];
 
