@@ -39,7 +39,7 @@
   
     NSMutableDictionary * dict;
     NSMutableArray *stringArray;
-    NSMutableArray *orignialArray;
+    NSMutableArray *originalArray;
   
 }
 

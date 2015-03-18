@@ -67,7 +67,7 @@
                 </toolbar>
                 <scrollView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" pagingEnabled="YES" translatesAutoresizingMaskIntoConstraints="NO" id="ovV-nH-7WH">
                     <rect key="frame" x="0.0" y="69" width="768" height="872"/>
-                    <color key="backgroundColor" red="1" green="0.21606499785961553" blue="0.15324038941411811" alpha="1" colorSpace="calibratedRGB"/>
+                    <color key="backgroundColor" red="0.97747454579624304" green="0.98053900042539066" blue="1" alpha="1" colorSpace="calibratedRGB"/>
                     <connections>
                         <outlet property="delegate" destination="-1" id="4hg-km-Cpx"/>
                     </connections>

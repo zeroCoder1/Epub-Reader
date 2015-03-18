@@ -37,13 +37,13 @@
 	_xmlHandler.delegate=self;
 	[_xmlHandler parseXMLFileAt:[self getRootFilePath]];
     
-    _swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(swipeRightAction:)];
+    _swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self  action:@selector(prev:)];
     _swipeRight.direction = UISwipeGestureRecognizerDirectionRight;
     _swipeRight.delegate = self;
     _swipeRight.enabled = NO;
     [_scrollView addGestureRecognizer:_swipeRight];
     
-    _swipeLeft = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(swipeLeftAction:)];
+    _swipeLeft = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(next:)];
     _swipeLeft.direction = UISwipeGestureRecognizerDirectionLeft;
     _swipeLeft.delegate = self;
     _swipeLeft.enabled = NO;
@@ -177,11 +177,11 @@
 	//set page number
     
     stringArray = [[NSMutableArray alloc]init];
-    orignialArray = [[NSMutableArray alloc]init];
+    originalArray = [[NSMutableArray alloc]init];
 
 
     NSString* htmlString = [[NSString alloc] initWithData:[NSData dataWithContentsOfURL:[NSURL fileURLWithPath:_pagesPath]] encoding:NSUTF8StringEncoding];
-    dispatch_async(dispatch_get_main_queue(), ^{
+   
     
         NSError *error = NULL;
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(<img\\s[\\s\\S]*?src\\s*?=\\s*?['\"](.*?)['\"][\\s\\S]*?>)+?"
@@ -195,7 +195,7 @@
                                  
                                  _originalImageString = [htmlString substringWithRange:[result rangeAtIndex:2]];
                                  
-                                 [orignialArray addObject:_originalImageString];
+                                 [originalArray addObject:_originalImageString];
                                  
                                  
                                  NSArray *myStrings = [[NSArray alloc] initWithObjects:[_pagesPath stringByDeletingLastPathComponent], @"/", _originalImageString, nil];
@@ -208,23 +208,24 @@
         
         _outputString = htmlString;
         
-
+    dispatch_async(dispatch_get_main_queue(), ^{
         if (_originalImageString) {
             for (int i= 0; i< [stringArray count]; i++) {
                 
-                _outputString = [_outputString stringByReplacingOccurrencesOfString:[orignialArray objectAtIndex:i] withString:[stringArray objectAtIndex:i]];
-
+                _outputString = [_outputString stringByReplacingOccurrencesOfString:[originalArray objectAtIndex:i] withString:[stringArray objectAtIndex:i]];
                 
-//                NSString *docsFolder = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
-//                NSString *filename = [docsFolder stringByAppendingPathComponent:@"sample.html"];
-//                NSError *error;
-//                [_outputString writeToFile:filename atomically:NO encoding:NSUTF8StringEncoding error:&error];
+                /*
+                 NSString *docsFolder = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
+                 NSString *filename = [docsFolder stringByAppendingPathComponent:@"sample.html"];
+                 NSError *error;
+                 [_outputString writeToFile:filename atomically:NO encoding:NSUTF8StringEncoding error:&error];
+                 */
             }
         }else{
             _outputString = [NSString stringWithString:htmlString];
         }
-
-
+        
+        
         _textStorage = [[NSTextStorage alloc]initWithData:[_outputString dataUsingEncoding:NSUnicodeStringEncoding] options:@{ NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType } documentAttributes:nil error:nil];
         _layoutManager = [[NSLayoutManager alloc]init];
         [_textStorage addLayoutManager:_layoutManager];
@@ -236,6 +237,34 @@
     
    
 }
+
+
++ (NSString *)scanString:(NSString *)string startTag:(NSString *)startTag endTag:(NSString *)endTag {
+    
+    NSString* scanString = @"";
+    
+    if (string.length > 0) {
+        
+        NSScanner* scanner = [[NSScanner alloc] initWithString:string];
+        
+        @try {
+            [scanner scanUpToString:startTag intoString:nil];
+            scanner.scanLocation += [startTag length];
+            [scanner scanUpToString:endTag intoString:&scanString];
+        }
+        @catch (NSException *exception) {
+            return nil;
+        }
+        @finally {
+            return scanString;
+        }
+        
+    }
+    
+    return scanString;
+    
+}
+
 
 
 - (void)layoutTextContainers{
@@ -338,22 +367,22 @@
     
     if (_pageNumber < [self._ePubContent._spine count]-1 ) {
 
-    CATransition *animation = [CATransition animation];
-    [animation setDelegate:self];
-    [animation setDuration:0.5f];
-    [animation setType:@"pageCurl"];
-    
-    //[animation setType:kcat]; 
-    [animation setSubtype:@"fromRight"];
-    
 
+        CATransition *transition = [CATransition animation];
+        transition.type = kCATransitionMoveIn;
+        [transition setDelegate:self];
+        transition.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        transition.duration = 0.5;
+        transition.subtype = kCATransitionFromBottom;
+        
+  
+        
     
 
     //[_textView reload];
     _pageNumber++;
     [self loadPage];
-    
-    [[_textView layer] addAnimation:animation forKey:@"WebPageCurl"];
+    [[self.textView layer] addAnimation:transition forKey:@"next"];
 
     }
     for (UITextView*tv in self.scrollView.subviews) {
@@ -368,24 +397,27 @@
     
     if (_pageNumber >0 ) {
 
-    CATransition *animation = [CATransition animation];
-    [animation setDelegate:self];
-    [animation setDuration:0.5f];
-    [animation setType:@"pageUnCurl"];
-    [animation setSubtype:@"fromRight"];
+        CATransition *transition = [CATransition animation];
+        transition.type = kCATransitionPush;
+        [transition setDelegate:self];
+        transition.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        transition.fillMode = kCAFillModeBoth;
+        transition.duration = 0.5;
+        transition.subtype = kCATransitionFromLeft;
+
     
     
    // [_webview reload];
     _pageNumber--;
     [self loadPage];
-    [[_scrollView layer] addAnimation:animation forKey:@"WebPageUnCurl"];
+        [[self.scrollView layer] addAnimation:transition forKey:@"prev"];
         [self.scrollView setContentOffset:CGPointMake(0, self.scrollView.contentOffset.y) animated:NO];
 
-
+        for (UITextView*tv in self.scrollView.subviews) {
+            [tv removeFromSuperview];
+        }
     }
-    for (UITextView*tv in self.scrollView.subviews) {
-        [tv removeFromSuperview];
-    }
+    
 }
 
 
@@ -395,22 +427,28 @@
     if (_pageNumber < [self._ePubContent._spine count]-1 ) {
 
     
-    CATransition *animation = [CATransition animation];
-    [animation setDelegate:self];
-    [animation setDuration:0.5f];
-    [animation setType:@"pageCurl"];
-    [animation setSubtype:@"fromRight"];
-    //[_webview reload];
-    _pageNumber++;
-    [self loadPage];
-    [[_scrollView layer] addAnimation:animation forKey:@"WebPageCurl"];
+        CATransition *transition = [CATransition animation];
+        transition.type = kCATransitionPush;
+        transition.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        transition.fillMode = kCAFillModeBoth;
+        transition.duration = 0.5;
+        transition.subtype = kCATransitionFromRight;    //[_webview reload];
+        _pageNumber++;
+        [self loadPage];
+        [[self.scrollView layer] addAnimation:transition forKey:@"next"];
         [self.scrollView setContentOffset:CGPointMake(0, self.scrollView.contentOffset.y) animated:NO];
 
+        for (UITextView*tv in self.scrollView.subviews) {
+            [tv removeFromSuperview];
+        }
+    }
+    else{
+     
+        NSLog(@"You've reached the end");
+
     }
 
-    for (UITextView*tv in self.scrollView.subviews) {
-        [tv removeFromSuperview];
-    }
+    
 }
 
 
@@ -568,9 +606,35 @@
 
 }
 
-
-
-
+- (void)textTapped:(UITapGestureRecognizer *)recognizer
+{
+    UITextView *textView = (UITextView *)recognizer.view;
+    
+    // Location of the tap in text-container coordinates
+    
+    NSLayoutManager *layoutManager = textView.layoutManager;
+    CGPoint location = [recognizer locationInView:textView];
+    location.x -= textView.textContainerInset.left;
+    location.y -= textView.textContainerInset.top;
+    
+    // Find the character that's been tapped on
+    
+    NSUInteger characterIndex;
+    characterIndex = [layoutManager characterIndexForPoint:location
+                                           inTextContainer:textView.textContainer
+                  fractionOfDistanceBetweenInsertionPoints:NULL];
+    
+    if (characterIndex < textView.textStorage.length) {
+        
+        NSRange range;
+      //  id value = [textView.attributedText attribute:@"myCustomTag" atIndex:characterIndex effectiveRange:&range];
+        
+        // Handle as required...
+        
+        NSLog(@"%d, %d", range.location, range.length);
+        
+    }
+}
 
 
 @end
