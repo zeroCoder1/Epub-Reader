@@ -25,6 +25,9 @@
 	int _pageNumber;
     NSUInteger textFontSize;
     BOOL isInverted;
+    
+    NSString *textColor;
+    NSString *backgroundColor;
 }
 
 

@@ -46,8 +46,9 @@
     swipeLeft.delegate = self;
     [_webview addGestureRecognizer:swipeLeft];
 
-    textFontSize = 100;
-    
+    textFontSize = 120;
+    textColor = [[NSString alloc]init];
+    backgroundColor = [[NSString alloc]init];
   
 }
 
@@ -63,7 +64,7 @@
 	
     NSString *zipPath = [[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"];
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
-    [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath];
+    [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath overwrite:YES password:nil error:nil];
 
 }
 
@@ -171,12 +172,7 @@
 	[_webview loadRequest:[NSURLRequest requestWithURL:[NSURL fileURLWithPath:_pagesPath]]];
 	//set page number
 	_pageNumberLbl.text=[NSString stringWithFormat:@"%d",_pageNumber+1];
-    
-    
-    
-    
-       
-    
+
 }
 
 
@@ -207,8 +203,7 @@
 
 
 
-- (void)swipeLeftAction:(id)ignored
-{
+- (void)swipeLeftAction:(id)ignored{
     
     if (_pageNumber < [self._ePubContent._spine count]-1 ) {
 
@@ -256,8 +251,8 @@
 
 
 
-- (IBAction)next:(id)ignored
-{
+- (IBAction)next:(id)ignored{
+    
     if (_pageNumber < [self._ePubContent._spine count]-1 ) {
 
     
@@ -278,11 +273,8 @@
 }
 
 
--(IBAction)plusA:(id)sender{
+- (IBAction)plusA:(id)sender{
     
-    NSUserDefaults *userDefaults1 = [NSUserDefaults standardUserDefaults];
-    [userDefaults1 setBool:YES forKey:@"btnM2"];
-    [userDefaults1 synchronize];
     
     textFontSize = (textFontSize < 140) ? textFontSize +2 : textFontSize;
     NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
@@ -292,11 +284,7 @@
 
 
 
--(IBAction)minusA:(id)sender{
-    
-    NSUserDefaults *userDefaults1 = [NSUserDefaults standardUserDefaults];
-    [userDefaults1 setBool:NO forKey:@"btnM2"];
-    [userDefaults1 synchronize];
+- (IBAction)minusA:(id)sender{
     
     textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
     NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
@@ -305,32 +293,46 @@
 }
 
 
--(IBAction)day:(id)sender{
+- (IBAction)day:(id)sender{
     
-    NSUserDefaults *userDefaults = [NSUserDefaults standardUserDefaults];
-    [userDefaults setBool:YES forKey:@"btnM1"];
-    [userDefaults synchronize];
+    backgroundColor = @"white";
+    textColor = @"black";
     
-    [_webview setOpaque:NO];
-    [_webview setBackgroundColor:[UIColor whiteColor]];
-    NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'black'"];
+    NSString *jsString1 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].bgColor= '%@'",backgroundColor];
+    [_webview stringByEvaluatingJavaScriptFromString:jsString1];
+
+    
+    NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= '%@'",textColor];
     [_webview stringByEvaluatingJavaScriptFromString:jsString2];
    
+
 }
 
 
 
--(IBAction)night:(id)sender{
+- (IBAction)night:(id)sender{
 
-    NSUserDefaults *userDefaults2 = [NSUserDefaults standardUserDefaults];
-     [userDefaults2 setBool:NO forKey:@"btnM1"];
-    [userDefaults2 synchronize];
     
-    [_webview setOpaque:NO];
-    [_webview setBackgroundColor:[UIColor blackColor]];
-    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'white'"];
-    [_webview stringByEvaluatingJavaScriptFromString:jsString];
+    [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
+        
+        backgroundColor = @"black";
+        textColor = @"white";
+        
+        NSString *jsString1 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].bgColor= '%@'",backgroundColor];
+        [_webview stringByEvaluatingJavaScriptFromString:jsString1];
+        
+        
+        NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= '%@'",textColor];
+        [_webview stringByEvaluatingJavaScriptFromString:jsString2];
+        
+    } completion:^(BOOL finished) {
+        
+       
+   
+    }];
     
+
+   
 }
 
 
@@ -341,47 +343,18 @@
 }
 
 
-- (void)webViewDidFinishLoad:(UIWebView *)webView
-{
-    
-    
-    NSUserDefaults *menuUserDefaults = [NSUserDefaults standardUserDefaults];
+- (void)webViewDidFinishLoad:(UIWebView *)webView{
+  
 
-    if([menuUserDefaults boolForKey:@"btnM1"]){
-        [_webview setOpaque:NO];
-        [_webview setBackgroundColor:[UIColor whiteColor]];
-        NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'black'"];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString2];
+        NSString *jsString1 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= '%@'",textColor];
+        [webView stringByEvaluatingJavaScriptFromString:jsString1];
     
-    }
+        NSString *jsString2 = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].bgColor= '%@'",backgroundColor];
+        [webView stringByEvaluatingJavaScriptFromString:jsString2];
     
-    else{
-        [_webview setOpaque:NO];
-        [_webview setBackgroundColor:[UIColor blackColor]];
-        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextFillColor= 'white'"];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-    
-    }
-    
-    NSUserDefaults *menuUserDefaults2 = [NSUserDefaults standardUserDefaults];
-    
-    if([menuUserDefaults2 boolForKey:@"btnM2"]){
-       
-        textFontSize = (textFontSize < 140) ? textFontSize +2 : textFontSize;
-        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-        
-    }
-    
-    else{
-              
         textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
         NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
-        [_webview stringByEvaluatingJavaScriptFromString:jsString];
-        
-    }
-    
-    
+        [webView stringByEvaluatingJavaScriptFromString:jsString];
     
 }
 
