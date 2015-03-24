@@ -6,6 +6,8 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
+#import "Constants.h"
+
 #import "ViewController.h"
 #import "SSZipArchive.h"
 
@@ -62,7 +64,7 @@
 
 - (void)unzipAndSaveFile{
 	
-    NSString *zipPath = [[NSBundle mainBundle] pathForResource:_strFileName ofType:@"epub"];
+    NSString *zipPath = [[NSBundle mainBundle] pathForResource:@"igp-ttohr-math copy" ofType:@"epub"];
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
     [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath overwrite:YES password:nil error:nil];
 
@@ -343,6 +345,7 @@
 }
 
 
+
 - (void)webViewDidFinishLoad:(UIWebView *)webView{
   
 
@@ -355,6 +358,20 @@
         textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
         NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
         [webView stringByEvaluatingJavaScriptFromString:jsString];
+    
+    
+    
+    NSString *insertRule1 = [NSString stringWithFormat:@"addCSSRule('html', 'padding: 0px; height: %fpx; -webkit-column-gap: 0px; -webkit-column-width: %fpx; overflow: hidden;')", self.view.bounds.size.height, _webview.bounds.size.width];
+   // NSString *insertRule2 = [NSString stringWithFormat:@"addCSSRule('p', 'text-align: justify;')"];
+    
+    [webView stringByEvaluatingJavaScriptFromString:SHEET];
+    [webView stringByEvaluatingJavaScriptFromString:ADDCSSRULE];
+    [webView stringByEvaluatingJavaScriptFromString:insertRule1];
+  //  [webView stringByEvaluatingJavaScriptFromString:insertRule2];
+    
+
+    webView.scrollView.showsHorizontalScrollIndicator = NO;
+    webView.scrollView.scrollEnabled = NO;
     
 }
 
