@@ -23,12 +23,12 @@ http://idpf.org/epub/30
 
 Additional details.
 
- .Swipe to change chapters or tap on next and previous buttons.
- .There are text font size increase and decrese methods.
- .Day/Night reading Mode.
- .Search text on a current page.
- .Orientation support.
- .Curl pages animation.
+ *Swipe to change chapters or tap on next and previous buttons.
+ *There are text font size increase and decrese methods.
+ *Day/Night reading Mode.
+ *Search text on a current page.
+ *Orientation support.
+ *Minimal Pagination. -- Once the scrollstops, have to press the next button.
 
 The app will rememeber the size of the text and mode selected. 
 
