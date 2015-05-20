@@ -32,5 +32,4 @@ Additional details.
 
 The app will rememeber the size of the text and mode selected. 
 
-Guys can use this reader without any credits to me. Use it and say it's your own. But, if you add any enhancements to
-the existing code, please do those changes here as well. 
+If you add any enhancements to the existing code, please do those changes here as well. 
