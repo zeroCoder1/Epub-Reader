@@ -21,8 +21,6 @@
 		39B3DA5914E3C4AD00256B57 /* UIWebViewSearch.js in Resources */ = {isa = PBXBuildFile; fileRef = 39B3DA5714E3C45D00256B57 /* UIWebViewSearch.js */; };
 		39D95FE8152DFD2200A602E4 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 39D95FE7152DFD2200A602E4 /* QuartzCore.framework */; };
 		83A03CDC1B2EBFCE008F7D56 /* Default-568h@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 83A03CDB1B2EBFCE008F7D56 /* Default-568h@2x.png */; };
-		83C53B211AC137A40030E6A8 /* igp-ttohr-math copy.epub in Resources */ = {isa = PBXBuildFile; fileRef = 83C53B201AC137A40030E6A8 /* igp-ttohr-math copy.epub */; };
-		83C53B231AC137B60030E6A8 /* tomsawyer.epub in Resources */ = {isa = PBXBuildFile; fileRef = 83C53B221AC137B60030E6A8 /* tomsawyer.epub */; };
 		83DF68B91AA831DE006D49AE /* moby-dick-20120118.epub in Resources */ = {isa = PBXBuildFile; fileRef = 83DF68B81AA831DE006D49AE /* moby-dick-20120118.epub */; };
 		83DF68EA1AA86D55006D49AE /* ioapi.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68E01AA86D55006D49AE /* ioapi.c */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
 		83DF68EB1AA86D55006D49AE /* mztools.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68E21AA86D55006D49AE /* mztools.c */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
@@ -54,8 +52,6 @@
 		39D95FE7152DFD2200A602E4 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		83A03CDB1B2EBFCE008F7D56 /* Default-568h@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Default-568h@2x.png"; sourceTree = "<group>"; };
 		83C53B1F1AC12E470030E6A8 /* Constants.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Constants.h; sourceTree = "<group>"; };
-		83C53B201AC137A40030E6A8 /* igp-ttohr-math copy.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "igp-ttohr-math copy.epub"; sourceTree = "<group>"; };
-		83C53B221AC137B60030E6A8 /* tomsawyer.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = tomsawyer.epub; sourceTree = "<group>"; };
 		83DF68B81AA831DE006D49AE /* moby-dick-20120118.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "moby-dick-20120118.epub"; sourceTree = "<group>"; };
 		83DF68DF1AA86D55006D49AE /* crypt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = crypt.h; sourceTree = "<group>"; };
 		83DF68E01AA86D55006D49AE /* ioapi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ioapi.c; sourceTree = "<group>"; };
@@ -135,8 +131,6 @@
 		3958177214E120FB0032DBF2 /* Supporting Files */ = {
 			isa = PBXGroup;
 			children = (
-				83C53B221AC137B60030E6A8 /* tomsawyer.epub */,
-				83C53B201AC137A40030E6A8 /* igp-ttohr-math copy.epub */,
 				83DF68B81AA831DE006D49AE /* moby-dick-20120118.epub */,
 				39B3DA5714E3C45D00256B57 /* UIWebViewSearch.js */,
 				3958177314E120FB0032DBF2 /* testPubb-Info.plist */,
@@ -210,7 +204,7 @@
 		3958175E14E120FB0032DBF2 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0610;
+				LastUpgradeCheck = 0630;
 			};
 			buildConfigurationList = 3958176114E120FB0032DBF2 /* Build configuration list for PBXProject "testPubb" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -234,11 +228,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				83C53B231AC137B60030E6A8 /* tomsawyer.epub in Resources */,
 				83DF68B91AA831DE006D49AE /* moby-dick-20120118.epub in Resources */,
 				39B3DA5914E3C4AD00256B57 /* UIWebViewSearch.js in Resources */,
 				3958177614E120FB0032DBF2 /* InfoPlist.strings in Resources */,
-				83C53B211AC137A40030E6A8 /* igp-ttohr-math copy.epub in Resources */,
 				83A03CDC1B2EBFCE008F7D56 /* Default-568h@2x.png in Resources */,
 				3958178214E120FB0032DBF2 /* ViewController.xib in Resources */,
 			);
@@ -303,6 +295,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
@@ -340,6 +333,7 @@
 				COPY_PHASE_STRIP = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
