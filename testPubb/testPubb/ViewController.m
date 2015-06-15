@@ -279,7 +279,7 @@
     
     
     textFontSize = (textFontSize < 140) ? textFontSize +2 : textFontSize;
-    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
+    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%lu%%'", (unsigned long)textFontSize];
     [_webview stringByEvaluatingJavaScriptFromString:jsString];
     
 }
@@ -289,7 +289,7 @@
 - (IBAction)minusA:(id)sender{
     
     textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
-    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
+    NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%lu%%'", (unsigned long)textFontSize];
     [_webview stringByEvaluatingJavaScriptFromString:jsString];
 
 }
@@ -356,7 +356,7 @@
         [webView stringByEvaluatingJavaScriptFromString:jsString2];
     
         textFontSize = (textFontSize > 100) ? textFontSize -2 : textFontSize;
-        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%d%%'", textFontSize];
+        NSString *jsString = [[NSString alloc] initWithFormat:@"document.getElementsByTagName('body')[0].style.webkitTextSizeAdjust= '%lu%%'", (unsigned long)textFontSize];
         [webView stringByEvaluatingJavaScriptFromString:jsString];
     
     
@@ -407,7 +407,7 @@
     
     [self removeHighlights];
     
-    int resultCount = [self stringHighlight:searchBar.text];
+    NSUInteger resultCount = [self stringHighlight:searchBar.text];
     
     // If no occurences of string, show alert message
     if (resultCount <= 0) {
