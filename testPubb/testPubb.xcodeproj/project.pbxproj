@@ -22,6 +22,8 @@
 		83712C9B1AAD5AFB00104DF4 /* libxml2.2.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 83712C9A1AAD5AFB00104DF4 /* libxml2.2.dylib */; };
 		8372DF0F1AA96FE7007F1911 /* moby-dick-20120118.epub in Resources */ = {isa = PBXBuildFile; fileRef = 8372DF0E1AA96FE7007F1911 /* moby-dick-20120118.epub */; };
 		8372DF111AA9B156007F1911 /* Default-568h@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = 8372DF101AA9B156007F1911 /* Default-568h@2x.png */; };
+		83C53B2A1AC139BC0030E6A8 /* tomsawyer.epub in Resources */ = {isa = PBXBuildFile; fileRef = 83C53B281AC139BC0030E6A8 /* tomsawyer.epub */; };
+		83C53B2B1AC139BC0030E6A8 /* igp-ttohr-math copy.epub in Resources */ = {isa = PBXBuildFile; fileRef = 83C53B291AC139BC0030E6A8 /* igp-ttohr-math copy.epub */; };
 		83DF68C71AA84068006D49AE /* ioapi.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68BD1AA84068006D49AE /* ioapi.c */; };
 		83DF68C81AA84068006D49AE /* mztools.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68BF1AA84068006D49AE /* mztools.c */; };
 		83DF68C91AA84068006D49AE /* unzip.c in Sources */ = {isa = PBXBuildFile; fileRef = 83DF68C11AA84068006D49AE /* unzip.c */; };
@@ -52,6 +54,8 @@
 		83712C9A1AAD5AFB00104DF4 /* libxml2.2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libxml2.2.dylib; path = usr/lib/libxml2.2.dylib; sourceTree = SDKROOT; };
 		8372DF0E1AA96FE7007F1911 /* moby-dick-20120118.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "moby-dick-20120118.epub"; sourceTree = "<group>"; };
 		8372DF101AA9B156007F1911 /* Default-568h@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Default-568h@2x.png"; sourceTree = "<group>"; };
+		83C53B281AC139BC0030E6A8 /* tomsawyer.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = tomsawyer.epub; sourceTree = "<group>"; };
+		83C53B291AC139BC0030E6A8 /* igp-ttohr-math copy.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = "igp-ttohr-math copy.epub"; sourceTree = "<group>"; };
 		83DF68BC1AA84068006D49AE /* crypt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = crypt.h; sourceTree = "<group>"; };
 		83DF68BD1AA84068006D49AE /* ioapi.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ioapi.c; sourceTree = "<group>"; };
 		83DF68BE1AA84068006D49AE /* ioapi.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ioapi.h; sourceTree = "<group>"; };
@@ -131,6 +135,8 @@
 		3958177214E120FB0032DBF2 /* Supporting Files */ = {
 			isa = PBXGroup;
 			children = (
+				83C53B281AC139BC0030E6A8 /* tomsawyer.epub */,
+				83C53B291AC139BC0030E6A8 /* igp-ttohr-math copy.epub */,
 				8372DF0E1AA96FE7007F1911 /* moby-dick-20120118.epub */,
 				3958177314E120FB0032DBF2 /* testPubb-Info.plist */,
 				3958177414E120FB0032DBF2 /* InfoPlist.strings */,
@@ -231,6 +237,8 @@
 				8372DF111AA9B156007F1911 /* Default-568h@2x.png in Resources */,
 				3958177614E120FB0032DBF2 /* InfoPlist.strings in Resources */,
 				3958178214E120FB0032DBF2 /* ViewController.xib in Resources */,
+				83C53B2B1AC139BC0030E6A8 /* igp-ttohr-math copy.epub in Resources */,
+				83C53B2A1AC139BC0030E6A8 /* tomsawyer.epub in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

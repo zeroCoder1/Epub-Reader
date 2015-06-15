@@ -12,6 +12,8 @@
 
 
 
+
+
 @implementation ViewController
 @synthesize _ePubContent;
 @synthesize _rootPath;
@@ -23,6 +25,7 @@
 {
     [super didReceiveMemoryWarning];
     // Release any cached data, images, etc that aren't in use.
+    
 }
 
 #pragma mark - View lifecycle
@@ -66,7 +69,7 @@
 
 - (void)unzipAndSaveFile{
 	
-    NSString *zipPath = [[NSBundle mainBundle] pathForResource:@"moby-dick-20120118" ofType:@"epub"];
+    NSString *zipPath = [[NSBundle mainBundle] pathForResource:@"igp-ttohr-math copy" ofType:@"epub"];
     NSString *destinationPath = [NSString stringWithFormat:@"%@/UnzippedEpub",[self applicationDocumentsDirectory]];
     [SSZipArchive unzipFileAtPath:zipPath toDestination:destinationPath overwrite:YES password:nil error:nil];
 
@@ -606,35 +609,35 @@
 
 }
 
-- (void)textTapped:(UITapGestureRecognizer *)recognizer
-{
-    UITextView *textView = (UITextView *)recognizer.view;
-    
-    // Location of the tap in text-container coordinates
-    
-    NSLayoutManager *layoutManager = textView.layoutManager;
-    CGPoint location = [recognizer locationInView:textView];
-    location.x -= textView.textContainerInset.left;
-    location.y -= textView.textContainerInset.top;
-    
-    // Find the character that's been tapped on
-    
-    NSUInteger characterIndex;
-    characterIndex = [layoutManager characterIndexForPoint:location
-                                           inTextContainer:textView.textContainer
-                  fractionOfDistanceBetweenInsertionPoints:NULL];
-    
-    if (characterIndex < textView.textStorage.length) {
-        
-        NSRange range;
-      //  id value = [textView.attributedText attribute:@"myCustomTag" atIndex:characterIndex effectiveRange:&range];
-        
-        // Handle as required...
-        
-        NSLog(@"%d, %d", range.location, range.length);
-        
-    }
-}
+//- (void)textTapped:(UITapGestureRecognizer *)recognizer
+//{
+//    UITextView *textView = (UITextView *)recognizer.view;
+//    
+//    // Location of the tap in text-container coordinates
+//    
+//    NSLayoutManager *layoutManager = textView.layoutManager;
+//    CGPoint location = [recognizer locationInView:textView];
+//    location.x -= textView.textContainerInset.left;
+//    location.y -= textView.textContainerInset.top;
+//    
+//    // Find the character that's been tapped on
+//    
+//    NSUInteger characterIndex;
+//    characterIndex = [layoutManager characterIndexForPoint:location
+//                                           inTextContainer:textView.textContainer
+//                  fractionOfDistanceBetweenInsertionPoints:NULL];
+//    
+//    if (characterIndex < textView.textStorage.length) {
+//        
+//        NSRange range;
+//      //  id value = [textView.attributedText attribute:@"myCustomTag" atIndex:characterIndex effectiveRange:&range];
+//        
+//        // Handle as required...
+//        
+//        NSLog(@"%d, %d", range.location, range.length);
+//        
+//    }
+//}
 
 
 @end
