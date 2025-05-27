@@ -1,3 +1,7 @@
+Rebuilt from ground up using swift, added pagination, highlights, bookmarks.
+
+
+
 What happens when you load an Epub into a UITextView, look into the ** ![Experimental Branch](https://github.com/zeroCoder1/Epub-Reader/tree/Experimental) 
 
 # Epub-Reader
