@@ -1,4 +1,4 @@
-Rebuilt from ground up using swift, added pagination, highlights, bookmarks.
+# Rebuilt from ground up using swift, added pagination, highlights, bookmarks.
 
 
 
