@@ -39,3 +39,4 @@ The app will rememeber the size of the text and mode selected.
  
  
  If you add any enhancements to the existing code, please do those changes here as well. 
+<!-- GitAds-Verify: LABL53P49GMGFW7QHJNUDWB2DK3EW7KZ -->
