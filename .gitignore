@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Xcode user-specific state
+xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+build/
+DerivedData/
+
+# Sample EPUB books (not committed)
+*.epub
