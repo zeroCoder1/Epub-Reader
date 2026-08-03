@@ -1,6 +1,5 @@
 # Epub-Reader
 
-[![Build Status](https://travis-ci.org/zeroCoder1/Epub-Reader.svg?branch=master)](https://travis-ci.org/zeroCoder1/Epub-Reader)
 
 A native EPUB reader for iPhone and iPad, rebuilt from the ground up in Swift/UIKit. It parses EPUB 3 packages and renders them in a paginated `WKWebView` with highlighting, bookmarks, a table of contents, and rich theming.
 
