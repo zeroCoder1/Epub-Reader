@@ -9,7 +9,7 @@ import UIKit
 import WebKit
 import SwiftSoup
 
-class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewControllerDataSource, UIPageViewControllerDelegate, UITableViewDataSource, UITableViewDelegate {
+class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewControllerDataSource, UIPageViewControllerDelegate, UITableViewDataSource, UITableViewDelegate, ThemesSettingsViewControllerDelegate, CustomizeThemeViewControllerDelegate, UIGestureRecognizerDelegate {
     private var pageViewController: UIPageViewController!
     private let epubURL: URL
     private var spineItems: [EPUBSpineItem] = []
@@ -20,12 +20,41 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private var baseURL: URL?
     private var isPageCurlEnabled = UserDefaults.standard.bool(forKey: "isPageCurlEnabled")
     private let pageLabel = UILabel()
+    private var pageLabelShowsTotal = false
     private var bookmarks: [Bookmark] = []
     private var highlights: [Highlight] = []
+    private var pendingHighlightNavigation: Highlight? // Highlight to scroll to once its spine finishes paginating
     private let tocTableView = UITableView()
     private let highlightsTableView = UITableView()
     private var tocItems: [EPUBTOCItem] = []
     private let bookmarksTableView = UITableView()
+    private var pendingLoadErrorMessage: String?
+    private let chapterProgressLabel = UILabel()
+    private let closeButton = UIButton(type: .system)
+    private let floatingMenuButton = UIButton(type: .system)
+    private var floatingMenuShowsBookmark = false
+    private let menuBackdropView = UIControl()
+    private let commandPanel = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+    private let panelContentStack = UIStackView()
+    private let panelHeaderButton = UIButton(type: .system)
+    private let panelHeaderLabel = UILabel()
+    private var orientationLocked = false
+    private let searchButton = UIButton(type: .system)
+    private let themeButton = UIButton(type: .system)
+    private let shareButton = UIButton(type: .system)
+    private let transitionButton = UIButton(type: .system)
+    private let highlightsButton = UIButton(type: .system)
+    private let quickBookmarkButton = UIButton(type: .system)
+    private var panelItemViews: [UIView] = []
+    private var coverImage: UIImage?
+    private var isChromeVisible = false
+    private var lastChromeToggleTimestamp: TimeInterval = 0
+    private lazy var bookmarksStorageKey: String = {
+        "savedBookmarks_\(epubURL.lastPathComponent)"
+    }()
+    private lazy var highlightsStorageKey: String = {
+        "savedHighlights_\(epubURL.lastPathComponent)"
+    }()
     
     init(epubURL: URL) {
         self.epubURL = epubURL
@@ -38,27 +67,40 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .white
+        view.backgroundColor = UIColor(white: 0.97, alpha: 1)
         setupNavigationBar()
         setupPageLabel()
+        setupReaderChrome()
         
         // Load data first before parsing EPUB
         loadHighlights()
         loadBookmarks()
-        
-        parseAndLoadEPUB()
-        setupPageViewController()
+
+        if parseAndLoadEPUB() {
+            setupPageViewController()
+        }
+        setupTOCView()
+        setupHighlightsView()
+        setupBookmarksView()
         setupMenuController()
+        setChromeVisible(false, animated: false)
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        setupTOCView()
-        setupHighlightsView()
-        setupBookmarksView()
         // Data already loaded in viewDidLoad, just reload table views
         highlightsTableView.reloadData()
         bookmarksTableView.reloadData()
+
+        if let message = pendingLoadErrorMessage {
+            pendingLoadErrorMessage = nil
+            showLoadErrorAndReturnToLibrary(message: message)
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        ensureReaderChromeAboveContent()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -91,51 +133,45 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         let webView = currentPageVC.webView
         let highlightJS = """
         (function() {
+            var doc = window.document;
             var selection = window.getSelection();
-            if (selection.rangeCount > 0) {
-                var range = selection.getRangeAt(0);
-                var span = document.createElement('span');
-                span.className = 'highlight';
-                span.style.backgroundColor = '\(highlightColor)';
-                span.style.color = 'black';
-                
-                var selectedText = selection.toString();
-                
-                // Get context around the selection for better matching
-                var textContent = document.body.textContent || document.body.innerText;
-                var selectedIndex = textContent.indexOf(selectedText);
-                var contextStart = Math.max(0, selectedIndex - 50);
-                var contextEnd = Math.min(textContent.length, selectedIndex + selectedText.length + 50);
-                var textContext = textContent.substring(contextStart, contextEnd);
-                
-                // Calculate relative position in the document
-                var relativePosition = selectedIndex / textContent.length;
-                
-                try {
-                    range.surroundContents(span);
-                    selection.removeAllRanges();
-                    
-                    // Return the highlighted data to Swift
-                    return {
-                        text: selectedText,
-                        context: textContext,
-                        position: relativePosition
-                    };
-                } catch(e) {
-                    var contents = range.extractContents();
-                    span.appendChild(contents);
-                    range.insertNode(span);
-                    selection.removeAllRanges();
-                    
-                    // Return the highlighted data to Swift
-                    return {
-                        text: selectedText,
-                        context: textContext,
-                        position: relativePosition
-                    };
+            if (!selection || selection.rangeCount === 0) return null;
+            var range = selection.getRangeAt(0);
+            var selectedText = selection.toString();
+            if (!selectedText) return null;
+
+            var textContent = doc.body.textContent || doc.body.innerText;
+
+            // Compute the absolute UTF-16 offset of the selection start within body.textContent.
+            function absoluteOffset(container, offsetInNode) {
+                var walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
+                var total = 0, node;
+                while (node = walker.nextNode()) {
+                    if (node === container) return total + offsetInNode;
+                    total += node.textContent.length;
                 }
+                return -1;
             }
-            return null;
+            var startOffset = -1;
+            if (range.startContainer.nodeType === 3) {
+                startOffset = absoluteOffset(range.startContainer, range.startOffset);
+            }
+            if (startOffset === -1) { startOffset = textContent.indexOf(selectedText); }
+
+            var contextStart = Math.max(0, startOffset - 50);
+            var contextEnd = Math.min(textContent.length, startOffset + selectedText.length + 50);
+            var textContext = textContent.substring(contextStart, contextEnd);
+            var relativePosition = textContent.length > 0 ? startOffset / textContent.length : 0;
+
+            var span = doc.createElement('span');
+            span.className = 'highlight';
+            span.style.backgroundColor = '\(highlightColor)';
+            span.style.color = 'black';
+            try { range.surroundContents(span); }
+            catch(e) { var contents = range.extractContents(); span.appendChild(contents); range.insertNode(span); }
+            selection.removeAllRanges();
+
+            return { text: selectedText, context: textContext, position: relativePosition, start: startOffset, length: selectedText.length };
         })();
         """
         
@@ -144,16 +180,19 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                let text = result["text"] as? String,
                let context = result["context"] as? String,
                let position = result["position"] as? Double,
+               let start = result["start"] as? Int,
                !text.isEmpty {
-                
+
+                let length = (result["length"] as? Int) ?? text.utf16.count
                 let highlight = Highlight(
                     spineIndex: self.currentSpineIndex,
                     pageNumber: self.currentPage,
                     text: text,
-                    range: NSRange(location: 0, length: text.count),
+                    range: NSRange(location: max(0, start), length: length),
                     color: highlightColor,
                     textContext: context,
-                    relativePosition: position
+                    relativePosition: position,
+                    startOffset: start >= 0 ? start : nil
                 )
                 
                 self.highlights.append(highlight)
@@ -174,8 +213,10 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private func setupPageViewController() {
-        let style: UIPageViewController.TransitionStyle = isPageCurlEnabled ? .pageCurl : .scroll
-        pageViewController = UIPageViewController(transitionStyle: style, navigationOrientation: .horizontal, options: nil)
+        let transition = ReaderPageTransition(rawValue: UserDefaults.standard.string(forKey: "pageTransition") ?? "slide") ?? .slide
+        let style: UIPageViewController.TransitionStyle = (transition == .curl) ? .pageCurl : .scroll
+        let orientation: UIPageViewController.NavigationOrientation = (transition == .scroll) ? .vertical : .horizontal
+        pageViewController = UIPageViewController(transitionStyle: style, navigationOrientation: orientation, options: nil)
         pageViewController.dataSource = self
         pageViewController.delegate = self
         addChild(pageViewController)
@@ -183,18 +224,36 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         pageViewController.view.frame = view.bounds
         pageViewController.view.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            pageViewController.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            pageViewController.view.bottomAnchor.constraint(equalTo: pageLabel.topAnchor, constant: -10),
+            pageViewController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            pageViewController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             pageViewController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             pageViewController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
+
         // Load the initial page
         if let initialPage = createPageViewController(for: currentPage) {
             pageViewController.setViewControllers([initialPage], direction: .forward, animated: false)
+        } else {
+            pendingLoadErrorMessage = "No readable chapter was found in this EPUB spine."
         }
+
+        ensureReaderChromeAboveContent()
+    }
+
+    private func ensureReaderChromeAboveContent() {
+        view.bringSubviewToFront(menuBackdropView)
+        view.bringSubviewToFront(commandPanel)
+        view.bringSubviewToFront(tocTableView)
+        view.bringSubviewToFront(highlightsTableView)
+        view.bringSubviewToFront(bookmarksTableView)
+        view.bringSubviewToFront(pageLabel)
+        view.bringSubviewToFront(chapterProgressLabel)
+        view.bringSubviewToFront(closeButton)
+        view.bringSubviewToFront(floatingMenuButton)
     }
     
     private func setupTOCView() {
+        guard tocTableView.superview == nil else { return }
         tocTableView.isHidden = true
         tocTableView.dataSource = self
         tocTableView.delegate = self
@@ -210,6 +269,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
     
     private func setupHighlightsView() {
+        guard highlightsTableView.superview == nil else { return }
         highlightsTableView.isHidden = true
         highlightsTableView.dataSource = self
         highlightsTableView.delegate = self
@@ -225,6 +285,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
     
     private func setupBookmarksView() {
+        guard bookmarksTableView.superview == nil else { return }
         bookmarksTableView.isHidden = true
         bookmarksTableView.dataSource = self
         bookmarksTableView.delegate = self
@@ -243,19 +304,543 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         view.addSubview(pageLabel)
         pageLabel.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            pageLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -10),
+            pageLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -4),
             pageLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor)
         ])
         pageLabel.textAlignment = .center
+        pageLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        pageLabel.textColor = UIColor(white: 0.35, alpha: 0.85)
     }
     
     private func setupNavigationBar() {
-        navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(title: "Highlights", style: .plain, target: self, action: #selector(toggleHighlights)),
-            UIBarButtonItem(title: "Bookmarks", style: .plain, target: self, action: #selector(toggleBookmarks)),
-            UIBarButtonItem(title: "TOC", style: .plain, target: self, action: #selector(toggleTOC))
-        ]
+        navigationItem.hidesBackButton = true
+        navigationController?.setNavigationBarHidden(true, animated: false)
     }
+
+    private func setupReaderChrome() {
+        setupTopChrome()
+        setupBottomChrome()
+    }
+
+    private func setupTopChrome() {
+        chapterProgressLabel.text = ""
+        chapterProgressLabel.textAlignment = .center
+        chapterProgressLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
+        chapterProgressLabel.textColor = UIColor(white: 0.45, alpha: 0.9)
+        chapterProgressLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(chapterProgressLabel)
+
+        closeButton.backgroundColor = UIColor(white: 1.0, alpha: 0.85)
+        closeButton.tintColor = UIColor(white: 0.35, alpha: 1.0)
+        closeButton.layer.cornerRadius = 22
+        closeButton.clipsToBounds = true
+        closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)), for: .normal)
+        closeButton.addTarget(self, action: #selector(closeReader), for: .touchUpInside)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            chapterProgressLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            chapterProgressLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+
+            closeButton.widthAnchor.constraint(equalToConstant: 44),
+            closeButton.heightAnchor.constraint(equalToConstant: 44),
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6),
+            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18)
+        ])
+    }
+
+    private func setupBottomChrome() {
+        floatingMenuButton.backgroundColor = UIColor(white: 1.0, alpha: 0.92)
+        floatingMenuButton.tintColor = UIColor(white: 0.10, alpha: 1.0)
+        floatingMenuButton.layer.cornerRadius = 22
+        floatingMenuButton.clipsToBounds = true
+        floatingMenuButton.setImage(UIImage(systemName: "list.bullet", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)), for: .normal)
+        floatingMenuButton.addTarget(self, action: #selector(toggleCommandPanel), for: .touchUpInside)
+        floatingMenuButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(floatingMenuButton)
+
+        menuBackdropView.alpha = 0
+        menuBackdropView.isHidden = true
+        menuBackdropView.backgroundColor = .clear
+        menuBackdropView.addTarget(self, action: #selector(hideCommandPanel), for: .touchUpInside)
+        menuBackdropView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(menuBackdropView)
+
+        commandPanel.effect = nil
+        commandPanel.backgroundColor = .clear
+        commandPanel.alpha = 0
+        commandPanel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(commandPanel)
+
+        panelContentStack.axis = .vertical
+        panelContentStack.spacing = 8
+        panelContentStack.alignment = .fill
+        panelContentStack.translatesAutoresizingMaskIntoConstraints = false
+        commandPanel.contentView.addSubview(panelContentStack)
+
+        configurePanelButtons()
+
+        NSLayoutConstraint.activate([
+            menuBackdropView.topAnchor.constraint(equalTo: view.topAnchor),
+            menuBackdropView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            menuBackdropView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            menuBackdropView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+
+            floatingMenuButton.widthAnchor.constraint(equalToConstant: 44),
+            floatingMenuButton.heightAnchor.constraint(equalToConstant: 44),
+            floatingMenuButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18),
+            floatingMenuButton.bottomAnchor.constraint(equalTo: pageLabel.topAnchor, constant: -12),
+
+            commandPanel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18),
+            commandPanel.widthAnchor.constraint(equalToConstant: 250),
+            commandPanel.bottomAnchor.constraint(equalTo: floatingMenuButton.topAnchor, constant: -12),
+
+            panelContentStack.topAnchor.constraint(equalTo: commandPanel.contentView.topAnchor),
+            panelContentStack.bottomAnchor.constraint(equalTo: commandPanel.contentView.bottomAnchor),
+            panelContentStack.leadingAnchor.constraint(equalTo: commandPanel.contentView.leadingAnchor),
+            panelContentStack.trailingAnchor.constraint(equalTo: commandPanel.contentView.trailingAnchor)
+        ])
+    }
+
+    private func configurePanelButtons() {
+        panelHeaderButton.addTarget(self, action: #selector(toggleTOC), for: .touchUpInside)
+        searchButton.addTarget(self, action: #selector(showSearchNotReady), for: .touchUpInside)
+        themeButton.addTarget(self, action: #selector(showThemeAndSettingsPanel), for: .touchUpInside)
+
+        configureRoundActionButton(shareButton, symbol: "square.and.arrow.up", action: #selector(shareCurrentBook))
+        configureRoundActionButton(transitionButton, symbol: "rotate.right", action: #selector(toggleOrientationLock))
+        configureRoundActionButton(highlightsButton, symbol: "highlighter", action: #selector(showHighlightsList))
+        configureRoundActionButton(quickBookmarkButton, symbol: "bookmark", action: #selector(toggleBookmarkCurrentPage))
+
+        let headerRow = makeGlassRow(button: panelHeaderButton, label: panelHeaderLabel, title: "Contents · ", symbol: "list.bullet", height: 48, cornerRadius: 24)
+        let searchRow = makeGlassRow(button: searchButton, label: UILabel(), title: "Search Book", symbol: "magnifyingglass", height: 48, cornerRadius: 24)
+        let themeRow = makeGlassRow(button: themeButton, label: UILabel(), title: "Themes & Settings", symbol: "textformat.size", height: 48, cornerRadius: 24)
+
+        let actionStack = UIStackView()
+        actionStack.axis = .horizontal
+        actionStack.spacing = 8
+        actionStack.distribution = .fillEqually
+        [shareButton, transitionButton, highlightsButton,quickBookmarkButton]
+            .map { glassWrap($0, height: 50, cornerRadius: 25) }
+            .forEach { actionStack.addArrangedSubview($0) }
+
+        panelItemViews = [headerRow, searchRow, themeRow, actionStack]
+        panelItemViews.forEach { panelContentStack.addArrangedSubview($0) }
+
+        updateOrientationLockButtonState()
+        updateBookmarkButtonState()
+    }
+
+    private func makeGlassRow(button: UIButton, label: UILabel, title: String, symbol: String, height: CGFloat, cornerRadius: CGFloat) -> UIVisualEffectView {
+        let container = makeGlassContainer(cornerRadius: cornerRadius)
+        label.text = title
+        label.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+        label.textColor = .label
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let icon = UIImageView(image: UIImage(systemName: symbol))
+        icon.tintColor = .label
+        icon.contentMode = .scaleAspectFit
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        button.backgroundColor = .clear
+        button.translatesAutoresizingMaskIntoConstraints = false
+        container.contentView.addSubview(label)
+        container.contentView.addSubview(icon)
+        container.contentView.addSubview(button)
+        NSLayoutConstraint.activate([
+            container.heightAnchor.constraint(equalToConstant: height),
+            label.leadingAnchor.constraint(equalTo: container.contentView.leadingAnchor, constant: 18),
+            label.centerYAnchor.constraint(equalTo: container.contentView.centerYAnchor),
+            icon.trailingAnchor.constraint(equalTo: container.contentView.trailingAnchor, constant: -18),
+            icon.centerYAnchor.constraint(equalTo: container.contentView.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 20),
+            icon.heightAnchor.constraint(equalToConstant: 20),
+            button.topAnchor.constraint(equalTo: container.contentView.topAnchor),
+            button.bottomAnchor.constraint(equalTo: container.contentView.bottomAnchor),
+            button.leadingAnchor.constraint(equalTo: container.contentView.leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: container.contentView.trailingAnchor)
+        ])
+        return container
+    }
+
+    private func makeGlassContainer(cornerRadius: CGFloat) -> UIVisualEffectView {
+        let effectView: UIVisualEffectView
+        if #available(iOS 26.0, *) {
+            let glass = UIGlassEffect()
+            glass.isInteractive = true
+            effectView = UIVisualEffectView(effect: glass)
+        } else {
+            effectView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+        }
+        effectView.layer.cornerRadius = cornerRadius
+        effectView.layer.cornerCurve = .continuous
+        effectView.clipsToBounds = true
+        effectView.translatesAutoresizingMaskIntoConstraints = false
+        return effectView
+    }
+
+    private func glassWrap(_ button: UIButton, height: CGFloat, cornerRadius: CGFloat) -> UIVisualEffectView {
+        button.backgroundColor = .clear
+        let container = makeGlassContainer(cornerRadius: cornerRadius)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        container.contentView.addSubview(button)
+        NSLayoutConstraint.activate([
+            container.heightAnchor.constraint(equalToConstant: height),
+            button.topAnchor.constraint(equalTo: container.contentView.topAnchor),
+            button.bottomAnchor.constraint(equalTo: container.contentView.bottomAnchor),
+            button.leadingAnchor.constraint(equalTo: container.contentView.leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: container.contentView.trailingAnchor)
+        ])
+        return container
+    }
+
+    private func configureRoundActionButton(_ button: UIButton, symbol: String, action: Selector) {
+        button.tintColor = .label
+        button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)), for: .normal)
+        button.addTarget(self, action: action, for: .touchUpInside)
+    }
+
+    @objc private func closeReader() {
+        navigationController?.popViewController(animated: true)
+    }
+
+    @objc private func toggleCommandPanel() {
+        if commandPanel.alpha > 0 {
+            hideCommandPanel()
+        } else {
+            showCommandPanel()
+        }
+    }
+
+    private func showCommandPanel() {
+        updatePanelProgress()
+        menuBackdropView.isHidden = false
+        menuBackdropView.alpha = 1
+        view.layoutIfNeeded()
+        commandPanel.transform = collapsedPanelTransform()
+        commandPanel.alpha = 0
+        let count = panelItemViews.count
+        for (i, item) in panelItemViews.enumerated() {
+            item.alpha = 0
+            UIView.animate(withDuration: 0.28, delay: 0.06 + Double(count - 1 - i) * 0.05, options: [.curveEaseOut]) {
+                item.alpha = 1
+            }
+        }
+        floatingMenuButton.isUserInteractionEnabled = false
+        closeButton.isUserInteractionEnabled = false
+        UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.78, initialSpringVelocity: 0.6, options: [.curveEaseOut], animations: {
+            self.commandPanel.transform = .identity
+            self.commandPanel.alpha = 1
+            self.floatingMenuButton.alpha = 0
+            self.closeButton.alpha = 0
+        })
+    }
+
+    // Scale/translate so the panel collapses into its bottom-right corner (above the menu button).
+    private func collapsedPanelTransform() -> CGAffineTransform {
+        let s: CGFloat = 0.05
+        let w = commandPanel.bounds.width, h = commandPanel.bounds.height
+        return CGAffineTransform(translationX: (1 - s) * w / 2, y: (1 - s) * h / 2).scaledBy(x: s, y: s)
+    }
+
+    @objc private func hideCommandPanel() {
+        guard !menuBackdropView.isHidden else { return }
+        UIView.animate(withDuration: 0.26, delay: 0, options: [.curveEaseIn], animations: {
+            self.commandPanel.transform = self.collapsedPanelTransform()
+            self.commandPanel.alpha = 0
+            self.menuBackdropView.alpha = 0
+            self.floatingMenuButton.alpha = 1
+            self.closeButton.alpha = 1
+        }, completion: { _ in
+            self.menuBackdropView.isHidden = true
+            self.commandPanel.transform = .identity
+            self.panelItemViews.forEach { $0.alpha = 1 }
+            self.floatingMenuButton.isUserInteractionEnabled = true
+            self.closeButton.isUserInteractionEnabled = true
+        })
+    }
+
+    @objc private func handleReaderTap() {
+        let now = CACurrentMediaTime()
+        if now - lastChromeToggleTimestamp < 0.25 {
+            return
+        }
+        lastChromeToggleTimestamp = now
+
+        if commandPanel.alpha > 0 {
+            hideCommandPanel()
+        }
+        setChromeVisible(!isChromeVisible, animated: true)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+
+    private func setChromeVisible(_ visible: Bool, animated: Bool) {
+        isChromeVisible = visible
+        pageLabelShowsTotal = visible
+        updatePageLabel()
+        let updates = {
+            self.chapterProgressLabel.alpha = visible ? 1 : 0
+            self.closeButton.alpha = visible ? 1 : 0
+            self.floatingMenuButton.alpha = visible ? 1 : 0
+        }
+
+        if animated {
+            UIView.animate(withDuration: 0.2, animations: updates)
+        } else {
+            updates()
+        }
+
+        chapterProgressLabel.isUserInteractionEnabled = visible
+        closeButton.isUserInteractionEnabled = visible
+        floatingMenuButton.isUserInteractionEnabled = visible
+    }
+
+    @objc private func showSearchNotReady() {
+        let alert = UIAlertController(title: "Search", message: "Search UI will be added next.", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    @objc private func showThemeAndSettingsPanel() {
+        hideCommandPanel()
+        let themesVC = ThemesSettingsViewController()
+        themesVC.delegate = self
+        themesVC.modalPresentationStyle = .overFullScreen
+        themesVC.modalTransitionStyle = .crossDissolve
+        present(themesVC, animated: true)
+    }
+
+    func themesViewController(_ controller: ThemesSettingsViewController, didSelectDarkMode isDarkMode: Bool) {
+        applyDarkMode(isDarkMode)
+    }
+
+    func themesViewController(_ controller: ThemesSettingsViewController, didSelectTheme theme: ReaderTheme) {
+        UserDefaults.standard.set(theme.backgroundHex, forKey: "backgroundColor")
+        UserDefaults.standard.set(theme.textHex, forKey: "textColor")
+        UserDefaults.standard.set(theme.darkBackgroundHex, forKey: "darkBackgroundColor")
+        UserDefaults.standard.set(theme.darkTextHex, forKey: "darkTextColor")
+        UserDefaults.standard.set(theme.bold ? "bold" : "normal", forKey: "fontWeight")
+        reapplyReaderSettings()
+    }
+
+    func themesViewController(_ controller: ThemesSettingsViewController, didChangeFontSizeBy delta: Int) {
+        let current = UserDefaults.standard.integer(forKey: "fontSize") > 0 ? UserDefaults.standard.integer(forKey: "fontSize") : 16
+        let newSize = min(32, max(12, current + delta))
+        UserDefaults.standard.set(newSize, forKey: "fontSize")
+        reapplyReaderSettings()
+    }
+
+    func themesViewController(_ controller: ThemesSettingsViewController, didSelectTransition transition: ReaderPageTransition) {
+        UserDefaults.standard.set(transition.rawValue, forKey: "pageTransition")
+        isPageCurlEnabled = (transition == .curl)
+        UserDefaults.standard.set(isPageCurlEnabled, forKey: "isPageCurlEnabled")
+        recreatePageViewController()
+    }
+
+    private func reapplyReaderSettings() {
+        if let currentPageVC = pageViewController.viewControllers?.first as? PageContentViewController {
+            applySettings(to: currentPageVC.webView)
+            scrollToPage(in: currentPageVC.webView, pageIndex: currentPage)
+        }
+    }
+
+    func themesViewControllerDidRequestCustomize(_ controller: ThemesSettingsViewController) {
+        controller.dismiss(animated: true) {
+            let customizeVC = CustomizeThemeViewController()
+            customizeVC.delegate = self
+            customizeVC.modalPresentationStyle = .pageSheet
+            if let sheet = customizeVC.sheetPresentationController {
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = false
+                sheet.preferredCornerRadius = 28
+            }
+            self.present(customizeVC, animated: true)
+        }
+    }
+
+    func customizeThemeDidUpdate(_ controller: CustomizeThemeViewController) {
+        reapplyReaderSettings()
+    }
+
+    @objc private func shareCurrentBook() {
+        hideCommandPanel()
+        let activityVC = UIActivityViewController(activityItems: [epubURL], applicationActivities: nil)
+        present(activityVC, animated: true)
+    }
+
+    @objc private func showTransitionOptions() {
+        hideCommandPanel()
+        let alert = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: "Slide", style: .default) { _ in self.setTransitionMode(false) })
+        alert.addAction(UIAlertAction(title: "Curl", style: .default) { _ in self.setTransitionMode(true) })
+        alert.addAction(UIAlertAction(title: "Fast Fade", style: .default) { _ in self.setTransitionMode(false) })
+        alert.addAction(UIAlertAction(title: "Scroll", style: .default) { _ in self.setTransitionMode(false) })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func setTransitionMode(_ usePageCurl: Bool) {
+        UserDefaults.standard.set(usePageCurl, forKey: "isPageCurlEnabled")
+        isPageCurlEnabled = usePageCurl
+        recreatePageViewController()
+    }
+
+    @objc private func showHighlightsList() {
+        hideCommandPanel()
+        guard !highlights.isEmpty || !bookmarks.isEmpty else {
+            let alert = UIAlertController(title: "Nothing Saved Yet", message: "You haven't highlighted or bookmarked anything in this book yet.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            return
+        }
+        // Derive page numbers from each highlight's stable position, not the stored snapshot.
+        let pageNumbers: [Int?] = highlights.map { derivedGlobalPage(forSpineIndex: $0.spineIndex, relativePosition: $0.relativePosition) }
+        let bookmarkPageNumbers: [Int?] = bookmarks.map { globalPageNumber(forSpineIndex: $0.spineIndex) + $0.pageNumber }
+        let vc = HighlightsListViewController(highlights: highlights,
+                                             pageNumbers: pageNumbers,
+                                             bookmarks: bookmarks,
+                                             bookmarkPageNumbers: bookmarkPageNumbers,
+                                             currentSpineIndex: currentSpineIndex,
+                                             bookTitle: title ?? "",
+                                             coverImage: coverImage,
+                                             onSelect: { [weak self] highlight in
+            self?.openHighlight(highlight)
+        }, onDelete: { [weak self] highlight in
+            self?.deleteHighlight(highlight)
+        }, onSelectBookmark: { [weak self] bookmark in
+            self?.openBookmark(bookmark)
+        }, onDeleteBookmark: { [weak self] bookmark in
+            self?.deleteBookmark(bookmark)
+        })
+        vc.modalPresentationStyle = .pageSheet
+        present(vc, animated: true)
+    }
+
+    private func openBookmark(_ bookmark: Bookmark) {
+        currentSpineIndex = bookmark.spineIndex
+        currentPage = bookmark.pageNumber
+        if let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
+            pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+        }
+        updatePageLabel()
+    }
+
+    private func deleteBookmark(_ bookmark: Bookmark) {
+        guard let index = bookmarks.firstIndex(where: {
+            $0.spineIndex == bookmark.spineIndex &&
+            $0.pageNumber == bookmark.pageNumber &&
+            $0.date == bookmark.date
+        }) else { return }
+        bookmarks.remove(at: index)
+        saveBookmarks()
+        updateBookmarkButtonState()
+    }
+
+    private func deleteHighlight(_ highlight: Highlight) {
+        guard let index = highlights.firstIndex(where: {
+            $0.spineIndex == highlight.spineIndex &&
+            $0.date == highlight.date &&
+            $0.text == highlight.text &&
+            NSEqualRanges($0.range, highlight.range)
+        }) else { return }
+        let wasOnCurrentSpine = highlights[index].spineIndex == currentSpineIndex
+        highlights.remove(at: index)
+        saveHighlights()
+        if wasOnCurrentSpine, let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
+            pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+        }
+    }
+
+    private func openHighlight(_ highlight: Highlight) {
+        currentSpineIndex = highlight.spineIndex
+        currentPage = 0
+        pendingHighlightNavigation = highlight
+        if let newPage = createPageViewController(for: 0, spineIndex: currentSpineIndex) {
+            pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+        }
+        updatePageLabel()
+    }
+
+    private func applyDarkMode(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: "isDarkMode")
+        if let currentPageVC = pageViewController.viewControllers?.first as? PageContentViewController {
+            applySettings(to: currentPageVC.webView)
+            scrollToPage(in: currentPageVC.webView, pageIndex: currentPage)
+        }
+    }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        return AppDelegate.orientationLock
+    }
+
+    @objc private func toggleOrientationLock() {
+        orientationLocked.toggle()
+        if orientationLocked {
+            let current = view.window?.windowScene?.interfaceOrientation ?? .portrait
+            AppDelegate.orientationLock = maskFor(current)
+        } else {
+            AppDelegate.orientationLock = .all
+        }
+        if #available(iOS 16.0, *) {
+            setNeedsUpdateOfSupportedInterfaceOrientations()
+            view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: AppDelegate.orientationLock)) { _ in }
+        } else {
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
+        updateOrientationLockButtonState()
+    }
+
+    private func maskFor(_ orientation: UIInterfaceOrientation) -> UIInterfaceOrientationMask {
+        switch orientation {
+        case .landscapeLeft: return .landscapeLeft
+        case .landscapeRight: return .landscapeRight
+        case .portraitUpsideDown: return .portraitUpsideDown
+        default: return .portrait
+        }
+    }
+
+    private func updateOrientationLockButtonState() {
+        let name = orientationLocked ? "lock.rotation" : "rotate.right"
+        transitionButton.setImage(UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)), for: .normal)
+        transitionButton.tintColor = orientationLocked ? .black : .label
+    }
+
+    private func isCurrentPageBookmarked() -> Bool {
+        return bookmarks.contains { $0.spineIndex == currentSpineIndex && $0.pageNumber == currentPage }
+    }
+
+    @objc private func toggleBookmarkCurrentPage() {
+        if let idx = bookmarks.firstIndex(where: { $0.spineIndex == currentSpineIndex && $0.pageNumber == currentPage }) {
+            bookmarks.remove(at: idx)
+        } else {
+            bookmarks.append(Bookmark(spineIndex: currentSpineIndex, pageNumber: currentPage, date: Date()))
+        }
+        saveBookmarks()
+        updateBookmarkButtonState()
+    }
+
+    private func updateBookmarkButtonState() {
+        let on = isCurrentPageBookmarked()
+        let name = on ? "bookmark.fill" : "bookmark"
+        quickBookmarkButton.setImage(UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)), for: .normal)
+        quickBookmarkButton.tintColor = on ? .systemRed : .label
+        updateFloatingMenuIcon(bookmarked: on)
+    }
+
+    private func updateFloatingMenuIcon(bookmarked: Bool) {
+        guard floatingMenuShowsBookmark != bookmarked else { return }
+        floatingMenuShowsBookmark = bookmarked
+        let name = bookmarked ? "bookmark.fill" : "list.bullet"
+        let image = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold))
+        let tint: UIColor = bookmarked ? .systemRed : UIColor(white: 0.10, alpha: 1.0)
+        UIView.transition(with: floatingMenuButton, duration: 0.3, options: .transitionCrossDissolve, animations: {
+            self.floatingMenuButton.setImage(image, for: .normal)
+            self.floatingMenuButton.tintColor = tint
+        })
+    }
+
     
 
     @objc func bookmarkFromMenu() {
@@ -279,14 +864,14 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private func saveBookmarks() {
         let encoder = JSONEncoder()
         if let encoded = try? encoder.encode(bookmarks) {
-            UserDefaults.standard.set(encoded, forKey: "savedBookmarks")
+            UserDefaults.standard.set(encoded, forKey: bookmarksStorageKey)
             print("Bookmarks saved: \(bookmarks.count) total")
         }
     }
 
     // Load bookmarks from UserDefaults
     private func loadBookmarks() {
-        if let savedBookmarks = UserDefaults.standard.object(forKey: "savedBookmarks") as? Data {
+        if let savedBookmarks = UserDefaults.standard.object(forKey: bookmarksStorageKey) as? Data {
             let decoder = JSONDecoder()
             if let loadedBookmarks = try? decoder.decode([Bookmark].self, from: savedBookmarks) {
                 bookmarks = loadedBookmarks
@@ -297,7 +882,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     // Load highlights from UserDefaults
     private func loadHighlights() {
-        if let savedHighlights = UserDefaults.standard.object(forKey: "savedHighlights") as? Data {
+        if let savedHighlights = UserDefaults.standard.object(forKey: highlightsStorageKey) as? Data {
             let decoder = JSONDecoder()
             if let loadedHighlights = try? decoder.decode([Highlight].self, from: savedHighlights) {
                 highlights = loadedHighlights
@@ -310,107 +895,103 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private func saveHighlights() {
         let encoder = JSONEncoder()
         if let encoded = try? encoder.encode(highlights) {
-            UserDefaults.standard.set(encoded, forKey: "savedHighlights")
+            UserDefaults.standard.set(encoded, forKey: highlightsStorageKey)
             print("Highlights saved: \(highlights.count) total")
         }
     }
 
     // Apply saved highlights to a WebView
-    private func applySavedHighlights(to webView: WKWebView) {
-        let currentHighlights = highlights.filter { $0.spineIndex == currentSpineIndex }
-        
-        for (index, highlight) in currentHighlights.enumerated() {
-            let highlightJS = """
-            (function() {
-                var textContent = document.body.textContent || document.body.innerText;
-                var searchText = '\(highlight.text.replacingOccurrences(of: "'", with: "\\'"))';
-                var context = '\(highlight.textContext.replacingOccurrences(of: "'", with: "\\'"))';
-                
-                // Try to find the text using context first
-                var foundIndex = -1;
-                if (context.length > 0) {
-                    var contextIndex = textContent.indexOf(context);
-                    if (contextIndex !== -1) {
-                        var relativeIndexInContext = context.indexOf(searchText);
-                        if (relativeIndexInContext !== -1) {
-                            foundIndex = contextIndex + relativeIndexInContext;
-                        }
-                    }
-                } else {
-                    // Fallback: use relative position
-                    var estimatedIndex = Math.floor(textContent.length * \(highlight.relativePosition));
-                    var searchWindow = 200; // Search within 200 characters
-                    var startSearch = Math.max(0, estimatedIndex - searchWindow);
-                    var endSearch = Math.min(textContent.length, estimatedIndex + searchWindow);
-                    var searchArea = textContent.substring(startSearch, endSearch);
-                    var localIndex = searchArea.indexOf(searchText);
-                    if (localIndex !== -1) {
-                        foundIndex = startSearch + localIndex;
-                    }
-                }
-                
-                // Final fallback: simple indexOf
-                if (foundIndex === -1) {
-                    foundIndex = textContent.indexOf(searchText);
-                }
-                
-                if (foundIndex !== -1) {
-                    // Find the text node and apply highlighting
-                    var walker = document.createTreeWalker(
-                        document.body,
-                        NodeFilter.SHOW_TEXT,
-                        null,
-                        false
-                    );
-                    
-                    var currentIndex = 0;
-                    var node;
-                    while (node = walker.nextNode()) {
-                        var nodeLength = node.textContent.length;
-                        if (currentIndex + nodeLength > foundIndex) {
-                            var localStart = foundIndex - currentIndex;
-                            var localEnd = localStart + searchText.length;
-                            
-                            if (localEnd <= nodeLength) {
-                                var range = document.createRange();
-                                range.setStart(node, localStart);
-                                range.setEnd(node, localEnd);
-                                
-                                var span = document.createElement('span');
-                                span.style.backgroundColor = '\(highlight.color)';
-                                span.style.color = 'black';
-                                span.className = 'saved-highlight-\(index)';
-                                span.setAttribute('data-highlight-id', '\(index)');
-                                
-                                try {
-                                    range.surroundContents(span);
-                                    return true;
-                                } catch(e) {
-                                    var contents = range.extractContents();
-                                    span.appendChild(contents);
-                                    range.insertNode(span);
-                                    return true;
-                                }
-                            }
-                        }
-                        currentIndex += nodeLength;
-                    }
-                }
-                return false;
-            })();
-            """
-            
-            webView.evaluateJavaScript(highlightJS) { success, error in
-                if let error = error {
-                    print("Error applying saved highlight: \(error)")
-                } else if let success = success as? Bool, success {
-                    print("Successfully applied highlight: \(highlight.text)")
-                }
-            }
+    // Encodes a Swift string as a safe JS string literal (handles quotes, newlines, unicode).
+    private func jsString(_ s: String) -> String {
+        if let data = try? JSONSerialization.data(withJSONObject: [s]),
+           let json = String(data: data, encoding: .utf8) {
+            return String(json.dropFirst().dropLast())
         }
+        return "\"\""
+    }
+
+    private func applySavedHighlights(to webView: WKWebView) {
+        // Use the webView's own spine, not currentSpineIndex, which can shift during transitions.
+        let spine = findPageViewController(for: webView)?.spineIndex ?? currentSpineIndex
+        let spineHighlights = highlights.filter { $0.spineIndex == spine }
+        guard !spineHighlights.isEmpty else { return }
+
+        let itemsJS = spineHighlights.enumerated().map { index, h in
+            let start = h.startOffset ?? -1
+            return "{id:\(index),text:\(jsString(h.text)),context:\(jsString(h.textContext)),position:\(h.relativePosition),color:\(jsString(h.color)),start:\(start),len:\(h.range.length)}"
+        }.joined(separator: ",")
+
+        let highlightJS = """
+        (function() {
+            var doc = window.document;
+            var items = [\(itemsJS)];
+            var textContent = doc.body.textContent || doc.body.innerText;
+
+            // Exact offset lookup: returns {node, offset} for an absolute textContent index.
+            function locate(offset) {
+                var walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
+                var total = 0, node;
+                while (node = walker.nextNode()) {
+                    var len = node.textContent.length;
+                    if (total + len >= offset) return { node: node, offset: offset - total };
+                    total += len;
+                }
+                return null;
+            }
+
+            // Fallback for legacy highlights without a stored offset.
+            function findIndex(it) {
+                var idx = -1;
+                if (it.context && it.context.length > 0) {
+                    var ci = textContent.indexOf(it.context);
+                    if (ci !== -1) {
+                        var r = it.context.indexOf(it.text);
+                        if (r !== -1) idx = ci + r;
+                    }
+                }
+                if (idx === -1 && it.position != null) {
+                    var est = Math.floor(textContent.length * it.position);
+                    var w = 200;
+                    var s = Math.max(0, est - w);
+                    var e = Math.min(textContent.length, est + w);
+                    var local = textContent.substring(s, e).indexOf(it.text);
+                    if (local !== -1) idx = s + local;
+                }
+                if (idx === -1) idx = textContent.indexOf(it.text);
+                return idx;
+            }
+
+            function wrap(startIdx, length, color, id) {
+                var s = locate(startIdx), e = locate(startIdx + length);
+                if (!s || !e) return;
+                var range = doc.createRange();
+                range.setStart(s.node, s.offset);
+                range.setEnd(e.node, e.offset);
+                var span = doc.createElement('span');
+                span.style.backgroundColor = color;
+                span.style.color = 'black';
+                span.className = 'saved-highlight';
+                span.setAttribute('data-highlight-id', id);
+                try { range.surroundContents(span); }
+                catch(e2) { var c = range.extractContents(); span.appendChild(c); range.insertNode(span); }
+            }
+
+            items.forEach(function(it) {
+                if (!it.text || doc.querySelector('[data-highlight-id="' + it.id + '"]')) return;
+                var startIdx = (it.start != null && it.start >= 0) ? it.start : findIndex(it);
+                if (startIdx === -1) return;
+                var length = (it.len && it.len > 0) ? it.len : it.text.length;
+                wrap(startIdx, length, it.color, it.id);
+            });
+            return true;
+        })();
+        """
+
+        webView.evaluateJavaScript(highlightJS, completionHandler: nil)
     }
     
     @objc private func toggleBookmarks() {
+        hideCommandPanel()
         bookmarksTableView.isHidden = !bookmarksTableView.isHidden
         tocTableView.isHidden = true
         highlightsTableView.isHidden = true
@@ -418,318 +999,316 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     @objc private func toggleTOC() {
-        tocTableView.isHidden = !tocTableView.isHidden
-        highlightsTableView.isHidden = true
-        bookmarksTableView.isHidden = true
-        
-        // Load TOC from HTML file if empty
-        if tocItems.isEmpty {
-            loadTOCFromHTML()
+        hideCommandPanel()
+        let mapping = tocItems.map { spineIndex(forTOCItem: $0) }
+        let pageNumbers = mapping.map { $0.map { globalPageNumber(forSpineIndex: $0) } }
+        let currentItemIndex = mapping.lastIndex(where: { ($0 ?? Int.max) <= currentSpineIndex })
+        let summary = "Page \(getCurrentGlobalPageNumber()) of \(max(1, getTotalGlobalPages()))"
+        let tocVC = TableOfContentsViewController(items: tocItems,
+                                                 pageNumbers: pageNumbers,
+                                                 currentItemIndex: currentItemIndex,
+                                                 bookTitle: title ?? "",
+                                                 coverImage: coverImage,
+                                                 pageSummary: summary) { [weak self] item in
+            self?.navigate(toTOCItem: item)
         }
-        
-        tocTableView.reloadData()
-        print("TOC toggled, items count: \(tocItems.count)")
+        tocVC.modalPresentationStyle = .pageSheet
+        present(tocVC, animated: true)
+    }
+
+    private func spineIndex(forTOCItem item: EPUBTOCItem) -> Int? {
+        var cleanHref = item.href
+        if cleanHref.hasPrefix("./") { cleanHref = String(cleanHref.dropFirst(2)) }
+        let fileHref = cleanHref.components(separatedBy: "#")[0]
+        return spineItems.firstIndex(where: { spine in
+            let spineHref = spine.href.components(separatedBy: "#")[0]
+            return spineHref == fileHref || spineHref.hasSuffix(fileHref) || fileHref.hasSuffix(spineHref)
+        })
+    }
+
+    private func globalPageNumber(forSpineIndex spineIndex: Int) -> Int {
+        var page = 1
+        for i in 0..<spineIndex where i < totalPagesPerSpine.count { page += totalPagesPerSpine[i] }
+        return page
+    }
+
+    // Derives a global page from a stable in-chapter position and the current pagination.
+    private func derivedGlobalPage(forSpineIndex spineIndex: Int, relativePosition: Double) -> Int {
+        let spineTotal = (spineIndex >= 0 && spineIndex < totalPagesPerSpine.count) ? max(1, totalPagesPerSpine[spineIndex]) : 1
+        let clamped = min(max(relativePosition, 0), 1)
+        let pageInSpine = min(spineTotal - 1, Int((clamped * Double(spineTotal)).rounded(.down)))
+        return globalPageNumber(forSpineIndex: spineIndex) + pageInSpine
+    }
+
+    private func navigate(toTOCItem item: EPUBTOCItem) {
+        guard let index = spineIndex(forTOCItem: item) else { return }
+        currentSpineIndex = index
+        currentPage = 0
+        if let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
+            pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+        }
+        updatePageLabel()
     }
     
     @objc private func toggleHighlights() {
+        hideCommandPanel()
         highlightsTableView.isHidden = !highlightsTableView.isHidden
         tocTableView.isHidden = true
         bookmarksTableView.isHidden = true
         highlightsTableView.reloadData()
     }
 
-    private func parseAndLoadEPUB() {
-        guard let (metadata, spine, toc, baseURL) = EPUBParser.parseEPUB(at: epubURL) else { return }
+    private func parseAndLoadEPUB() -> Bool {
+        guard let (metadata, spine, toc, baseURL) = EPUBParser.parseEPUB(at: epubURL) else {
+            pendingLoadErrorMessage = "Failed to parse EPUB package data."
+            return false
+        }
+        guard !spine.isEmpty else {
+            pendingLoadErrorMessage = "EPUB parsed, but no spine items were found."
+            return false
+        }
         title = metadata.title
         spineItems = spine
-        tocItems = toc // Keep this for fallback
+        tocItems = toc
         self.baseURL = baseURL
-        totalPagesPerSpine = Array(repeating: 1, count: spine.count)
-        
-        // Try to load TOC from HTML file
-        loadTOCFromHTML()
-    }
-    
-    private func loadTOCFromHTML() {
-        guard let baseURL = baseURL else { return }
-        
-        let tocURL = baseURL.appendingPathComponent("OPS/toc.xhtml")
-        
-        do {
-            let tocHTML = try String(contentsOf: tocURL)
-            let doc = try SwiftSoup.parse(tocHTML)
-            
-            // Parse the TOC HTML - typically contains nav or ol/li structure
-            var newTocItems: [EPUBTOCItem] = []
-            
-            // Try to find navigation elements (EPUB3 style)
-            if let nav = try doc.select("nav").first() {
-                let links = try nav.select("a")
-                for link in links {
-                    let href = try link.attr("href")
-                    let label = try link.text()
-                    if !href.isEmpty && !label.isEmpty {
-                        newTocItems.append(EPUBTOCItem(label: label, href: href))
-                    }
-                }
-            } else {
-                // Fallback: look for any links in the document
-                let links = try doc.select("a")
-                for link in links {
-                    let href = try link.attr("href")
-                    let label = try link.text()
-                    if !href.isEmpty && !label.isEmpty {
-                        newTocItems.append(EPUBTOCItem(label: label, href: href))
-                    }
-                }
-            }
-            
-            if !newTocItems.isEmpty {
-                tocItems = newTocItems
-                print("Loaded \(tocItems.count) TOC items from TOC.html")
-            } else {
-                print("No TOC items found in TOC.html, using existing TOC")
-            }
-            
-        } catch {
-            print("Error loading TOC.html: \(error)")
-            // Keep existing tocItems as fallback
+        if let coverURL = metadata.coverImageURL, let data = try? Data(contentsOf: coverURL) {
+            coverImage = UIImage(data: data)
         }
+        totalPagesPerSpine = Array(repeating: 1, count: spine.count)
+        return true
     }
     
-    private func createPageViewController(for pageIndex: Int) -> PageContentViewController? {
-        guard let baseURL = baseURL, currentSpineIndex < spineItems.count else { return nil }
+    private func createPageViewController(for pageIndex: Int, spineIndex: Int? = nil) -> PageContentViewController? {
+        guard let baseURL = baseURL else { return nil }
+        let targetSpineIndex = spineIndex ?? currentSpineIndex
+        guard targetSpineIndex >= 0, targetSpineIndex < spineItems.count else { return nil }
         
         // Create fresh WKWebViewConfiguration for each page
         let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         let webView = WKWebView(frame: .zero, configuration: config)
         
         webView.scrollView.isScrollEnabled = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.isOpaque = false
         webView.navigationDelegate = self
         webView.alpha = 0 // Hide initially to prevent flickering
-        let htmlURL = baseURL.appendingPathComponent("OPS/\(spineItems[currentSpineIndex].href)")
-        webView.loadFileURL(htmlURL, allowingReadAccessTo: baseURL)
+        let webTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleReaderTap))
+        webTapGesture.cancelsTouchesInView = false
+        webTapGesture.delegate = self
+        webView.addGestureRecognizer(webTapGesture)
+        let chapterURL = baseURL.appendingPathComponent(spineItems[targetSpineIndex].href)
+        guard FileManager.default.fileExists(atPath: chapterURL.path) else {
+            print("Missing spine file: \(chapterURL.path)")
+            return nil
+        }
+        webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
         
-        let pageVC = PageContentViewController(webView: webView, pageIndex: pageIndex, delegate: self)
+        let pageVC = PageContentViewController(webView: webView, pageIndex: pageIndex, spineIndex: targetSpineIndex, delegate: self)
         pageVC.targetPageIndex = pageIndex
         return pageVC
     }
+
+    private func showLoadErrorAndReturnToLibrary(message: String) {
+        let alert = UIAlertController(title: "Unable to Open EPUB", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Back", style: .default) { _ in
+            self.navigationController?.popViewController(animated: true)
+        })
+        present(alert, animated: true)
+    }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        applySettings(to: webView)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.calculateTotalPages(for: webView)
-            // Find the PageContentViewController that owns this webView and scroll to its target page
-            if let pageVC = self.findPageViewController(for: webView) {
-                self.scrollToPage(in: webView, pageIndex: pageVC.targetPageIndex) {
-                    // Apply saved highlights after page is positioned and content is loaded
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        self.applySavedHighlights(to: webView)
-                        // Show the web view after everything is ready
-                        webView.alpha = 1
-                    }
-                }
-            } else {
-                // If not found, still apply highlights and show the web view
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.applySavedHighlights(to: webView)
-                    webView.alpha = 1
-                }
-            }
-        }
-    }
-    
-    private func findPageViewController(for webView: WKWebView) -> PageContentViewController? {
-        // Check current page view controller
-        if let currentVC = pageViewController.viewControllers?.first as? PageContentViewController,
-           currentVC.webView == webView {
-            return currentVC
-        }
-        return nil
-    }
-    
-    private func calculateTotalPages(for webView: WKWebView) {
-        webView.evaluateJavaScript("window.getTotalPages()") { (totalPages, error) in
-            if let pages = totalPages as? Int, pages > 0 {
-                self.totalPagesPerSpine[self.currentSpineIndex] = pages
-                self.totalPages = pages
-                self.currentPage = min(self.currentPage, self.totalPages - 1)
-                self.updatePageLabel()
-                self.scrollToPage(in: webView, pageIndex: self.currentPage)
-            } else {
-                // Fallback: use a default single page if calculation fails
-                print("Page calculation failed - using default single page")
-                print("Total pages result: \(totalPages ?? "nil")")
-                self.totalPagesPerSpine[self.currentSpineIndex] = 1
-                self.totalPages = 1
-                self.currentPage = 0
-                self.updatePageLabel()
-            }
-        }
-    }
-    
-    private func applySettings(to webView: WKWebView) {
-        let backgroundColor = UserDefaults.standard.string(forKey: "backgroundColor") ?? "#FFFFFF"
-        let fontFamily = UserDefaults.standard.string(forKey: "fontFamily") ?? "Georgia"
-        let fontSize = UserDefaults.standard.integer(forKey: "fontSize") > 0 ? UserDefaults.standard.integer(forKey: "fontSize") : 16
-        let isDarkMode = UserDefaults.standard.bool(forKey: "isDarkMode")
-        
-        let viewHeight = view.safeAreaLayoutGuide.layoutFrame.height - pageLabel.frame.height - 20
-        let viewWidth = view.frame.width - 40
-        
-        let css = """
-        * {
-            -webkit-touch-callout: default;
-            box-sizing: border-box;
-        }
-        html {
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            overflow: hidden;
-            background-color: \(backgroundColor);
-        }
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: '\(fontFamily)', serif;
-            font-size: \(fontSize)px;
-            color: \(isDarkMode ? "#FFFFFF" : "#000000");
-            line-height: 1.6;
-            
-            /* Enable text selection */
-            -webkit-user-select: text;
-            -moz-user-select: text;
-            -ms-user-select: text;
-            user-select: text;
-            
-            /* Column-based pagination */
-            column-width: \(viewWidth)px;
-            column-height: \(viewHeight - 40)px;
-            column-gap: 20px;
-            column-fill: auto;
-            
-            /* Fixed height for consistent pagination */
-            height: \(viewHeight - 40)px;
-            width: auto;
-            overflow: hidden;
-            
-            /* Prevent awkward breaks */
-            orphans: 2;
-            widows: 2;
-        }
-        p {
-            margin-bottom: 1em;
-            break-inside: avoid-column;
-            -webkit-user-select: text;
-            user-select: text;
-        }
-        h1, h2, h3, h4, h5, h6 {
-            margin-top: 1.5em;
-            margin-bottom: 0.5em;
-            break-after: avoid-column;
-            break-inside: avoid-column;
-            -webkit-user-select: text;
-            user-select: text;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-            break-inside: avoid-column;
-        }
-        blockquote, pre {
-            break-inside: avoid-column;
-            -webkit-user-select: text;
-            user-select: text;
-        }
-        
-        /* Highlight styles */
-        .highlight {
-            background-color: yellow;
-            color: black;
-        }
-        """
-        
-        let js = """
-        var meta = document.createElement('meta');
-        meta.name = "viewport";
-        meta.content = "width=device-width, initial-scale=1.0, user-scalable=no";
-        document.head.appendChild(meta);
-        
-        var style = document.createElement('style');
-        style.type = "text/css";
-        style.textContent = `\(css)`;
-        document.head.appendChild(style);
-        
-        // Page configuration
-        var pageConfig = {
-            columnWidth: \(viewWidth),
-            columnGap: 20,
-            viewportWidth: \(viewWidth),
-            targetPageIndex: 0
-        };
-        
-        // Disable body scrolling but allow text selection
-        document.body.style.overflowX = 'hidden';
-        document.body.style.overflowY = 'hidden';
-        window.addEventListener('scroll', function(e) { e.preventDefault(); });
-        window.addEventListener('wheel', function(e) { e.preventDefault(); });
-        
-        // Existing page functions...
-        window.getTotalPages = function() {
-            var computedStyle = window.getComputedStyle(document.body);
-            var columnWidth = parseFloat(computedStyle.columnWidth) || pageConfig.columnWidth;
-            var columnGap = parseFloat(computedStyle.columnGap) || pageConfig.columnGap;
-            
-            var totalWidth = document.body.scrollWidth;
-            var singleColumnWidth = columnWidth + columnGap;
-            var totalColumns = Math.ceil(totalWidth / singleColumnWidth);
-            
-            console.log('Total width: ' + totalWidth + ', Single column: ' + singleColumnWidth + ', Columns: ' + totalColumns);
-            return Math.max(1, totalColumns);
-        };
-        
-        window.setPageIndex = function(pageIndex) {
-            pageConfig.targetPageIndex = pageIndex;
-            
-            var columnWidth = pageConfig.columnWidth;
-            var columnGap = pageConfig.columnGap;
-            var singleColumnWidth = columnWidth + columnGap;
-            
-            var leftPosition = pageIndex * singleColumnWidth;
-            
-            var clipPath = 'inset(0 0 0 ' + leftPosition + 'px)';
-            document.body.style.clipPath = clipPath;
-            document.body.style.webkitClipPath = clipPath;
-            document.body.style.marginLeft = '-' + leftPosition + 'px';
-            
-            return {
-                totalPages: window.getTotalPages(),
-                currentPage: pageIndex
-            };
-        };
-        
-        window.getCurrentPage = function() {
-            return pageConfig.targetPageIndex;
-        };
-        
-        window.refreshLayout = function() {
-            document.body.style.display = 'none';
-            document.body.offsetHeight;
-            document.body.style.display = '';
-            return window.getTotalPages();
-        };
-        """
-        
-        webView.evaluateJavaScript(js) { _, error in
-            if let error = error {
-                print("Error injecting settings: \(error)")
+        webView.evaluateJavaScript(readerPaginationJS()) { _, _ in
+            let pageVC = self.findPageViewController(for: webView)
+            let spineIndex = pageVC?.spineIndex ?? self.currentSpineIndex
+            let targetPage = pageVC?.targetPageIndex ?? self.currentPage
+            self.calculateTotalPages(for: webView, spineIndex: spineIndex, requestedPage: targetPage)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.applySavedHighlights(to: webView)
+                webView.alpha = 1
             }
         }
     }
 
+    private func findPageViewController(for webView: WKWebView) -> PageContentViewController? {
+        if let currentVC = pageViewController.viewControllers?.first as? PageContentViewController,
+           currentVC.webView == webView {
+            return currentVC
+        }
+        for child in pageViewController.children {
+            if let vc = child as? PageContentViewController, vc.webView == webView {
+                return vc
+            }
+        }
+        return nil
+    }
+
+    private func isVisibleWebView(_ webView: WKWebView) -> Bool {
+        return (pageViewController.viewControllers?.first as? PageContentViewController)?.webView == webView
+    }
+    
+    private func calculateTotalPages(for webView: WKWebView, spineIndex: Int, requestedPage: Int) {
+        webView.evaluateJavaScript("(window.getTotalPages ? window.getTotalPages() : 1)") { (totalPages, error) in
+            let pages = ((totalPages as? Int).flatMap { $0 > 0 ? $0 : nil }) ?? 1
+            self.totalPagesPerSpine[spineIndex] = pages
+
+            // If we're opening a highlight in this spine, scroll to its exact page once paginated.
+            if let pending = self.pendingHighlightNavigation, pending.spineIndex == spineIndex, self.isVisibleWebView(webView) {
+                self.pendingHighlightNavigation = nil
+                self.computeHighlightPage(in: webView, highlight: pending) { computed in
+                    var target = computed
+                    if target < 0 {
+                        let rel = min(max(pending.relativePosition, 0), 1)
+                        target = Int((rel * Double(pages)).rounded(.down))
+                    }
+                    target = min(max(0, target), pages - 1)
+                    self.scrollToPage(in: webView, pageIndex: target)
+                    self.currentSpineIndex = spineIndex
+                    self.currentPage = target
+                    self.totalPages = pages
+                    self.updatePageLabel()
+                }
+                return
+            }
+
+            let targetPage = min(max(0, requestedPage), pages - 1)
+            self.scrollToPage(in: webView, pageIndex: targetPage)
+            if self.isVisibleWebView(webView) {
+                self.currentSpineIndex = spineIndex
+                self.currentPage = targetPage
+                self.totalPages = pages
+                self.updatePageLabel()
+            }
+        }
+    }
+
+    // Computes the exact column/page index of a highlight from its stored text offset.
+    private func computeHighlightPage(in webView: WKWebView, highlight: Highlight, completion: @escaping (Int) -> Void) {
+        let start = highlight.startOffset ?? -1
+        guard start >= 0 else { completion(-1); return }
+        let length = max(1, highlight.range.length)
+        let js = """
+        (function() {
+            var doc = window.document;
+            var body = doc.body;
+            if (!body) return -1;
+            function locate(offset) {
+                var walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+                var total = 0, node;
+                while (node = walker.nextNode()) {
+                    var len = node.textContent.length;
+                    if (total + len >= offset) return { node: node, offset: offset - total };
+                    total += len;
+                }
+                return null;
+            }
+            var pageW = body.clientWidth || 1;
+            var total = Math.max(1, Math.round(body.scrollWidth / pageW));
+            var t = locate(\(start));
+            if (!t) return -1;
+            var range = doc.createRange();
+            var endOff = Math.min(t.node.textContent.length, t.offset + \(length));
+            range.setStart(t.node, t.offset);
+            range.setEnd(t.node, endOff);
+            var prev = body.scrollLeft;
+            body.scrollLeft = 0;
+            var r = range.getBoundingClientRect();
+            var b = body.getBoundingClientRect();
+            var cs = window.getComputedStyle(body);
+            var originLeft = b.left + (body.clientLeft || 0) + (parseFloat(cs.paddingLeft) || 0);
+            var x = r.left - originLeft;
+            body.scrollLeft = prev;
+            var page = Math.floor((x + 1) / pageW);
+            if (page < 0) page = 0;
+            if (page > total - 1) page = total - 1;
+            return page;
+        })();
+        """
+        webView.evaluateJavaScript(js) { result, _ in
+            completion((result as? Int) ?? -1)
+        }
+    }
+    
+    private func readerThemeJSObject() -> String {
+        let backgroundColor = UserDefaults.standard.string(forKey: "backgroundColor") ?? "#FFFFFF"
+        let textColor = UserDefaults.standard.string(forKey: "textColor") ?? "#000000"
+        let darkBackground = UserDefaults.standard.string(forKey: "darkBackgroundColor") ?? "#000000"
+        let darkText = UserDefaults.standard.string(forKey: "darkTextColor") ?? "#FFFFFF"
+        let fontFamily = UserDefaults.standard.string(forKey: "fontFamily") ?? "Georgia"
+        let fontSize = UserDefaults.standard.integer(forKey: "fontSize") > 0 ? UserDefaults.standard.integer(forKey: "fontSize") : 16
+        let fontWeight = UserDefaults.standard.string(forKey: "fontWeight") ?? "normal"
+        let lineHeight = UserDefaults.standard.object(forKey: "lineHeight") != nil ? UserDefaults.standard.double(forKey: "lineHeight") : 1.6
+        let letterSpacing = UserDefaults.standard.double(forKey: "letterSpacing") * 0.05
+        let wordSpacing = UserDefaults.standard.double(forKey: "wordSpacing") * 0.15
+        let margins = UserDefaults.standard.double(forKey: "readerMargins") * 1.2
+        let justify = UserDefaults.standard.bool(forKey: "justifyText")
+        let isDarkMode = UserDefaults.standard.bool(forKey: "isDarkMode")
+        let bg = isDarkMode ? darkBackground : backgroundColor
+        let color = isDarkMode ? darkText : textColor
+        return "{ fontFamily: '\(fontFamily)', fontSize: \(fontSize), fontWeight: '\(fontWeight)', color: '\(color)', bg: '\(bg)', lineHeight: \(lineHeight), letterSpacing: \(letterSpacing), wordSpacing: \(wordSpacing), margins: \(margins), justify: \(justify) }"
+    }
+
+    private func applySettings(to webView: WKWebView) {
+        let themeJS = "window.setReaderTheme && window.setReaderTheme(\(readerThemeJSObject())); 0;"
+        webView.evaluateJavaScript(themeJS) { _, error in
+            if let error = error {
+                print("Error applying settings: \(error)")
+            }
+        }
+    }
+
+    private func readerPaginationJS() -> String {
+        return """
+        (function(){
+            var theme = \(readerThemeJSObject());
+            if (window.__rdr) { window.__rdr.theme = theme; return window.refreshLayout(); }
+            window.__rdr = { currentPage: 0, theme: theme };
+            var m = document.querySelector('meta[name=viewport]');
+            if(!m){ m = document.createElement('meta'); m.setAttribute('name','viewport'); (document.head || document.documentElement).appendChild(m); }
+            m.setAttribute('content','width=device-width, initial-scale=1, viewport-fit=cover');
+            function baseCSS(){
+                var t = window.__rdr.theme;
+                var mg = (t.margins || 0);
+                return 'html{margin:0 !important;padding:calc(env(safe-area-inset-top) + 50px) calc(env(safe-area-inset-right) + '+(24+mg)+'px) calc(env(safe-area-inset-bottom) + 120px) calc(env(safe-area-inset-left) + '+(24+mg)+'px) !important;height:100% !important;overflow:hidden !important;box-sizing:border-box !important;background:'+t.bg+' !important;-webkit-text-size-adjust:100% !important;}' +
+                    'body{margin:0 !important;padding:0 !important;box-sizing:border-box !important;height:100% !important;overflow:hidden !important;background:'+t.bg+' !important;color:'+t.color+' !important;font-family:'+t.fontFamily+',Georgia,serif !important;font-size:'+t.fontSize+'px !important;font-weight:'+(t.fontWeight||'normal')+' !important;line-height:'+t.lineHeight+' !important;letter-spacing:'+(t.letterSpacing||0)+'px !important;word-spacing:'+(t.wordSpacing||0)+'px !important;text-align:'+(t.justify?'justify':'left')+' !important;}' +
+                    'img,svg,video{max-height:100% !important;height:auto !important;}' +
+                    'p{orphans:2;widows:2;}';
+            }
+            function ensureStyle(){
+                var s = document.getElementById('__rdrStyle');
+                if(!s){ s = document.createElement('style'); s.id = '__rdrStyle'; (document.head || document.documentElement).appendChild(s); }
+                return s;
+            }
+            function injectStyle(){
+                ensureStyle().textContent = baseCSS();
+                var b = document.body; if(!b) return;
+                var w = b.clientWidth, h = b.clientHeight;
+                b.style.setProperty('-webkit-column-width', w + 'px', 'important');
+                b.style.setProperty('column-width', w + 'px', 'important');
+                b.style.setProperty('-webkit-column-gap', '0', 'important');
+                b.style.setProperty('column-gap', '0', 'important');
+                b.style.setProperty('-webkit-column-fill', 'auto', 'important');
+                b.style.setProperty('column-fill', 'auto', 'important');
+                b.style.setProperty('max-width', w + 'px', 'important');
+                b.style.setProperty('height', h + 'px', 'important');
+                b.scrollLeft = 0;
+            }
+            function pageWidth(){ return document.body ? document.body.clientWidth : 1; }
+            function totalPages(){ var b = document.body; if(!b) return 1; return Math.max(1, Math.round(b.scrollWidth / pageWidth())); }
+            window.getTotalPages = function(){ return totalPages(); };
+            window.getCurrentPage = function(){ return window.__rdr.currentPage; };
+            window.setPageIndex = function(i){ window.__rdr.currentPage = i; if(document.body){ document.body.scrollLeft = i * pageWidth(); } return totalPages(); };
+            window.refreshLayout = function(){ injectStyle(); window.setPageIndex(window.__rdr.currentPage || 0); return totalPages(); };
+            window.setReaderTheme = function(t){ window.__rdr.theme = t; injectStyle(); window.setPageIndex(window.__rdr.currentPage || 0); return totalPages(); };
+            injectStyle();
+            window.setPageIndex(0);
+            return totalPages();
+        })();
+        """
+    }
+
     func scrollToPage(in webView: WKWebView, pageIndex: Int, completion: (() -> Void)? = nil) {
-        webView.evaluateJavaScript("window.setPageIndex(\(pageIndex))") { result, error in
+        webView.evaluateJavaScript("if(window.setPageIndex){window.setPageIndex(\(pageIndex));}0;") { result, error in
             if let error = error {
                 print("Error setting page index: \(error)")
             }
@@ -740,7 +1319,15 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private func updatePageLabel() {
         let globalPageNumber = getCurrentGlobalPageNumber()
         let totalGlobalPages = getTotalGlobalPages()
-        pageLabel.text = "Page \(globalPageNumber) of \(totalGlobalPages)"
+        pageLabel.text = pageLabelShowsTotal ? "\(globalPageNumber) of \(totalGlobalPages)" : "\(globalPageNumber)"
+
+        let pagesLeftInChapter = max(0, totalPagesPerSpine[currentSpineIndex] - currentPage - 1)
+        updateBookmarkButtonState()
+    }
+
+    private func updatePanelProgress() {
+        let percent = Int((Double(getCurrentGlobalPageNumber()) / Double(max(1, getTotalGlobalPages()))) * 100)
+        panelHeaderLabel.text = "Contents · \(min(100, max(0, percent)))%"
     }
     
     private func getCurrentGlobalPageNumber() -> Int {
@@ -763,14 +1350,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         if current.pageIndex > 0 {
             // Previous page in same chapter
             let previousPage = current.pageIndex - 1
-            currentPage = previousPage
-            return createPageViewController(for: previousPage)
-        } else if currentSpineIndex > 0 {
+            return createPageViewController(for: previousPage, spineIndex: current.spineIndex)
+        } else if current.spineIndex > 0 {
             // Move to previous chapter, last page
-            currentSpineIndex -= 1
-            let lastPage = max(0, totalPagesPerSpine[currentSpineIndex] - 1)
-            currentPage = lastPage
-            return createPageViewController(for: lastPage)
+            let previousSpine = current.spineIndex - 1
+            let lastPage = max(0, totalPagesPerSpine[previousSpine] - 1)
+            return createPageViewController(for: lastPage, spineIndex: previousSpine)
         }
         return nil
     }
@@ -778,23 +1363,23 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
         guard let current = viewController as? PageContentViewController else { return nil }
         
-        if current.pageIndex < totalPagesPerSpine[currentSpineIndex] - 1 {
+        if current.pageIndex < totalPagesPerSpine[current.spineIndex] - 1 {
             // Next page in same chapter
             let nextPage = current.pageIndex + 1
-            currentPage = nextPage
-            return createPageViewController(for: nextPage)
-        } else if currentSpineIndex < spineItems.count - 1 {
+            return createPageViewController(for: nextPage, spineIndex: current.spineIndex)
+        } else if current.spineIndex < spineItems.count - 1 {
             // Move to next chapter, first page
-            currentSpineIndex += 1
-            currentPage = 0
-            return createPageViewController(for: 0)
+            let nextSpine = current.spineIndex + 1
+            return createPageViewController(for: 0, spineIndex: nextSpine)
         }
         return nil
     }
     
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
         if completed, let current = pageViewController.viewControllers?.first as? PageContentViewController {
+            currentSpineIndex = current.spineIndex
             currentPage = current.pageIndex
+            totalPages = totalPagesPerSpine[currentSpineIndex]
             updatePageLabel()
         }
     }
@@ -852,42 +1437,13 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     // MARK: - UITableViewDelegate
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         if tableView == tocTableView {
-            let tocItem = tocItems[indexPath.row]
-            print("TOC item selected: \(tocItem.label), href: \(tocItem.href)")
-            
-            // Clean the href - remove any leading "./" and handle fragments
-            var cleanHref = tocItem.href
-            if cleanHref.hasPrefix("./") {
-                cleanHref = String(cleanHref.dropFirst(2))
-            }
-            
-            // Split href and fragment if present
-            let components = cleanHref.components(separatedBy: "#")
-            let fileHref = components[0]
-            
-            // Find the spine index that matches the TOC href
-            if let index = spineItems.firstIndex(where: { spine in
-                let spineHref = spine.href.components(separatedBy: "#")[0]
-                return spineHref == fileHref || spineHref.hasSuffix(fileHref) || fileHref.hasSuffix(spineHref)
-            }) {
-                currentSpineIndex = index
-                currentPage = 0
-                if let newPage = createPageViewController(for: currentPage) {
-                    pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
-                }
-                updatePageLabel()
-                toggleTOC()
-                print("Navigated to spine index: \(index) for file: \(fileHref)")
-            } else {
-                print("Could not find matching spine for TOC href: \(fileHref)")
-                print("Available spine hrefs: \(spineItems.map { $0.href })")
-            }
+            navigate(toTOCItem: tocItems[indexPath.row])
         } else if tableView == highlightsTableView {
             let highlight = highlights[indexPath.row]
             currentSpineIndex = highlight.spineIndex
             
             // Navigate to the spine first
-            if let newPage = createPageViewController(for: 0) {
+            if let newPage = createPageViewController(for: 0, spineIndex: currentSpineIndex) {
                 pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
             }
             
@@ -900,7 +1456,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         } else {
             currentSpineIndex = bookmarks[indexPath.row].spineIndex
             currentPage = bookmarks[indexPath.row].pageNumber
-            if let newPage = createPageViewController(for: currentPage) {
+            if let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
                 pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
             }
             updatePageLabel()
@@ -915,15 +1471,18 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         }
         
         let webView = currentPageVC.webView
+        let storedStart = highlight.startOffset ?? -1
         let findHighlightJS = """
         (function() {
+            var document = window.document;
             var textContent = document.body.textContent || document.body.innerText;
             var searchText = '\(highlight.text.replacingOccurrences(of: "'", with: "\\'"))';
             var context = '\(highlight.textContext.replacingOccurrences(of: "'", with: "\\'"))';
-            
-            // Find the text position
-            var foundIndex = -1;
-            if (context.length > 0) {
+            var storedStart = \(storedStart);
+
+            // Prefer the exact stored offset; fall back to context/text search for legacy highlights.
+            var foundIndex = (storedStart >= 0 && storedStart <= textContent.length) ? storedStart : -1;
+            if (foundIndex === -1 && context.length > 0) {
                 var contextIndex = textContent.indexOf(context);
                 if (contextIndex !== -1) {
                     var relativeIndexInContext = context.indexOf(searchText);

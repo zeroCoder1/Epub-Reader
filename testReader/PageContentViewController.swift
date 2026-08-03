@@ -11,12 +11,14 @@ import WebKit
 class PageContentViewController: UIViewController {
     let webView: WKWebView
     let pageIndex: Int
+    let spineIndex: Int
     var targetPageIndex: Int = 0
     weak var delegate: ReaderViewController?
     
-    init(webView: WKWebView, pageIndex: Int, delegate: ReaderViewController?) {
+    init(webView: WKWebView, pageIndex: Int, spineIndex: Int, delegate: ReaderViewController?) {
         self.webView = webView
         self.pageIndex = pageIndex
+        self.spineIndex = spineIndex
         self.targetPageIndex = pageIndex
         self.delegate = delegate
         super.init(nibName: nil, bundle: nil)
@@ -31,8 +33,8 @@ class PageContentViewController: UIViewController {
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
@@ -64,9 +66,7 @@ class PageContentViewController: UIViewController {
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // Just set the page index when view appears - no translation needed
-        if webView.alpha > 0 {
-            delegate?.scrollToPage(in: webView, pageIndex: targetPageIndex)
-        }
+        // Re-assert this page's target index on appear; no-ops until pagination JS is ready.
+        delegate?.scrollToPage(in: webView, pageIndex: targetPageIndex)
     }
 }
