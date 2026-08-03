@@ -11,6 +11,7 @@ import Foundation
 struct EPUBMetadata {
     let title: String
     let author: String
+    let coverImageURL: URL?
 }
 
 struct EPUBSpineItem {
@@ -46,8 +47,9 @@ struct Highlight: Codable {
     let date: Date
     let textContext: String // Store surrounding text for better matching
     let relativePosition: Double // Position as percentage of spine content
-    
-    init(spineIndex: Int, pageNumber: Int, text: String, range: NSRange, color: String, textContext: String = "", relativePosition: Double = 0.0) {
+    let startOffset: Int? // Absolute UTF-16 offset of the selection start in the spine's textContent
+
+    init(spineIndex: Int, pageNumber: Int, text: String, range: NSRange, color: String, textContext: String = "", relativePosition: Double = 0.0, startOffset: Int? = nil) {
         self.spineIndex = spineIndex
         self.pageNumber = pageNumber
         self.text = text
@@ -56,6 +58,7 @@ struct Highlight: Codable {
         self.date = Date()
         self.textContext = textContext
         self.relativePosition = relativePosition
+        self.startOffset = startOffset
     }
     
     // Computed property for display in highlights list
@@ -65,7 +68,7 @@ struct Highlight: Codable {
     
     // Custom encoding for NSRange since it's not Codable by default
     enum CodingKeys: String, CodingKey {
-        case spineIndex, pageNumber, text, range, color, date, textContext, relativePosition
+        case spineIndex, pageNumber, text, range, color, date, textContext, relativePosition, startOffset
     }
     
     func encode(to encoder: Encoder) throws {
@@ -77,6 +80,7 @@ struct Highlight: Codable {
         try container.encode(date, forKey: .date)
         try container.encode(textContext, forKey: .textContext)
         try container.encode(relativePosition, forKey: .relativePosition)
+        try container.encodeIfPresent(startOffset, forKey: .startOffset)
         
         // Encode NSRange as location and length
         let rangeDict = ["location": range.location, "length": range.length]
@@ -92,6 +96,7 @@ struct Highlight: Codable {
         date = try container.decode(Date.self, forKey: .date)
         textContext = try container.decodeIfPresent(String.self, forKey: .textContext) ?? ""
         relativePosition = try container.decodeIfPresent(Double.self, forKey: .relativePosition) ?? 0.0
+        startOffset = try container.decodeIfPresent(Int.self, forKey: .startOffset)
         
         // Decode NSRange from location and length
         let rangeDict = try container.decode([String: Int].self, forKey: .range)
