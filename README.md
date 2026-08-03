@@ -3,8 +3,6 @@
 
 A native EPUB reader for iPhone and iPad, rebuilt from the ground up in Swift/UIKit. It parses EPUB 3 packages and renders them in a paginated `WKWebView` with highlighting, bookmarks, a table of contents, and rich theming.
 
-> Looking for the original UITextView-based experiment? See the **[Experimental Branch](https://github.com/zeroCoder1/Epub-Reader/tree/Experimental)**.
-
 ## Features
 
 ### Library
