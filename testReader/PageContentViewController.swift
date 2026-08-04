@@ -10,7 +10,7 @@ import WebKit
 
 class PageContentViewController: UIViewController {
     let webView: WKWebView
-    let pageIndex: Int
+    var pageIndex: Int
     let spineIndex: Int
     var targetPageIndex: Int = 0
     weak var delegate: ReaderViewController?
@@ -26,6 +26,11 @@ class PageContentViewController: UIViewController {
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        // Hand the webview back to the reader's warm pool for reuse.
+        delegate?.recycleWebView(webView)
     }
     
     override func viewDidLoad() {
