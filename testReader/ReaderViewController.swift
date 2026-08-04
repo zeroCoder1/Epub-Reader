@@ -18,6 +18,18 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private var totalPages = 0
     private var totalPagesPerSpine: [Int] = [] // Track pages per chapter
     private var baseURL: URL?
+    // Shared web content process across reader webviews to cut per-webview startup cost.
+    private static let sharedProcessPool = WKProcessPool()
+    // Reusable webviews returned by discarded page VCs; kept warm so same-chapter turns skip reload.
+    private var idleWebViews: [WKWebView] = []
+    private var webViewChapter: [ObjectIdentifier: Int] = [:] // chapter currently loaded in a webview
+    private var readyWebViews: Set<ObjectIdentifier> = [] // webviews that finished loading + paginating
+    private var lastReaderLayoutSize: CGSize = .zero // detects rotation/size changes to invalidate layouts
+    // Offscreen pass that paginates every chapter so the book's total page count is accurate.
+    private var precomputeWebView: WKWebView?
+    private var precomputeIndex = 0
+    private var didScheduleInitialPrecompute = false
+    private var precomputeWorkItem: DispatchWorkItem?
     private var isPageCurlEnabled = UserDefaults.standard.bool(forKey: "isPageCurlEnabled")
     private let pageLabel = UILabel()
     private var pageLabelShowsTotal = false
@@ -100,6 +112,11 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        // On size changes (e.g. rotation) cached column layouts are invalid; drop the warm pool.
+        if lastReaderLayoutSize != .zero, lastReaderLayoutSize != view.bounds.size {
+            invalidateWebViewPool()
+        }
+        lastReaderLayoutSize = view.bounds.size
         ensureReaderChromeAboveContent()
     }
     
@@ -203,6 +220,8 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private func recreatePageViewController() {
+        // Settings/style changed: cached layouts are stale, so drop the warm pool.
+        invalidateWebViewPool()
         // Remove old page view controller
         pageViewController.willMove(toParent: nil)
         pageViewController.view.removeFromSuperview()
@@ -641,6 +660,8 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private func reapplyReaderSettings() {
+        // Theme/typography changed: invalidate warm pool so adjacent pages reload with new settings.
+        invalidateWebViewPool()
         if let currentPageVC = pageViewController.viewControllers?.first as? PageContentViewController {
             applySettings(to: currentPageVC.webView)
             scrollToPage(in: currentPageVC.webView, pageIndex: currentPage)
@@ -766,6 +787,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     private func applyDarkMode(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: "isDarkMode")
+        invalidateWebViewPool()
         if let currentPageVC = pageViewController.viewControllers?.first as? PageContentViewController {
             applySettings(to: currentPageVC.webView)
             scrollToPage(in: currentPageVC.webView, pageIndex: currentPage)
@@ -1082,31 +1104,136 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         guard let baseURL = baseURL else { return nil }
         let targetSpineIndex = spineIndex ?? currentSpineIndex
         guard targetSpineIndex >= 0, targetSpineIndex < spineItems.count else { return nil }
-        
-        // Create fresh WKWebViewConfiguration for each page
-        let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        let webView = WKWebView(frame: .zero, configuration: config)
-        
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.isOpaque = false
-        webView.navigationDelegate = self
-        webView.alpha = 0 // Hide initially to prevent flickering
-        let webTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleReaderTap))
-        webTapGesture.cancelsTouchesInView = false
-        webTapGesture.delegate = self
-        webView.addGestureRecognizer(webTapGesture)
         let chapterURL = baseURL.appendingPathComponent(spineItems[targetSpineIndex].href)
         guard FileManager.default.fileExists(atPath: chapterURL.path) else {
             print("Missing spine file: \(chapterURL.path)")
             return nil
         }
-        webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
-        
+
+        // Prefer a pooled webview already showing this chapter: reuse it and just move columns.
+        var reusedWarm = false
+        let webView: WKWebView
+        if let idx = idleWebViews.firstIndex(where: {
+            webViewChapter[ObjectIdentifier($0)] == targetSpineIndex && readyWebViews.contains(ObjectIdentifier($0))
+        }) {
+            webView = idleWebViews.remove(at: idx)
+            reusedWarm = true
+        } else if let shell = idleWebViews.popLast() {
+            // Reuse an idle webview shell (skips process spin-up) but reload the new chapter.
+            webView = shell
+            webViewChapter[ObjectIdentifier(webView)] = targetSpineIndex
+            readyWebViews.remove(ObjectIdentifier(webView))
+            webView.alpha = 0
+            webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
+        } else {
+            webView = makeReaderWebView()
+            webViewChapter[ObjectIdentifier(webView)] = targetSpineIndex
+            webView.alpha = 0
+            webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
+        }
+
         let pageVC = PageContentViewController(webView: webView, pageIndex: pageIndex, spineIndex: targetSpineIndex, delegate: self)
         pageVC.targetPageIndex = pageIndex
+
+        if reusedWarm {
+            // Chapter already laid out: reveal immediately.
+            webView.alpha = 1
+            if let pending = pendingHighlightNavigation, pending.spineIndex == targetSpineIndex {
+                // Honor a pending highlight jump instead of the raw requested page.
+                pendingHighlightNavigation = nil
+                let pages = max(1, totalPagesPerSpine[targetSpineIndex])
+                scrollToHighlight(pending, in: webView, pages: pages)
+            } else {
+                scrollToPage(in: webView, pageIndex: pageIndex)
+            }
+        }
         return pageVC
+    }
+
+    // Builds a reader webview sharing the process pool and reader gesture/appearance config.
+    private func makeReaderWebView() -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.processPool = Self.sharedProcessPool
+        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.isOpaque = false
+        webView.navigationDelegate = self
+        let webTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleReaderTap))
+        webTapGesture.cancelsTouchesInView = false
+        webTapGesture.delegate = self
+        webView.addGestureRecognizer(webTapGesture)
+        return webView
+    }
+
+    // Called from a discarded PageContentViewController: return its webview to the warm pool.
+    func recycleWebView(_ webView: WKWebView) {
+        webView.removeFromSuperview()
+        if !idleWebViews.contains(webView) {
+            idleWebViews.append(webView)
+        }
+        // Cap the pool so memory stays bounded; evict the oldest warm webviews.
+        while idleWebViews.count > 4 {
+            let evicted = idleWebViews.removeFirst()
+            webViewChapter.removeValue(forKey: ObjectIdentifier(evicted))
+            readyWebViews.remove(ObjectIdentifier(evicted))
+        }
+    }
+
+    // Drops cached layouts (settings/theme/size changed) so webviews reload with new state.
+    private func invalidateWebViewPool() {
+        idleWebViews.removeAll()
+        webViewChapter.removeAll()
+        readyWebViews.removeAll()
+        // Page counts depend on the same layout, so recompute the book's total.
+        schedulePrecompute()
+    }
+
+    // Debounced restart of the offscreen pagination pass (settings can change rapidly).
+    private func schedulePrecompute() {
+        precomputeWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.startPrecompute() }
+        precomputeWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+
+    // Loads every chapter offscreen, paginates it, and records its page count.
+    private func startPrecompute() {
+        guard !spineItems.isEmpty, baseURL != nil else { return }
+        let bounds = view.bounds
+        guard bounds.width > 1, bounds.height > 1 else { return }
+
+        let webView: WKWebView
+        if let existing = precomputeWebView {
+            webView = existing
+        } else {
+            webView = makeReaderWebView()
+            webView.isUserInteractionEnabled = false
+            webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.insertSubview(webView, at: 0)
+            precomputeWebView = webView
+        }
+        webView.alpha = 0
+        webView.frame = bounds
+        precomputeIndex = 0
+        loadNextPrecomputeChapter()
+    }
+
+    private func loadNextPrecomputeChapter() {
+        guard let webView = precomputeWebView, let baseURL = baseURL else { return }
+        while precomputeIndex < spineItems.count {
+            let url = baseURL.appendingPathComponent(spineItems[precomputeIndex].href)
+            if FileManager.default.fileExists(atPath: url.path) {
+                webView.loadFileURL(url, allowingReadAccessTo: baseURL)
+                return
+            }
+            precomputeIndex += 1
+        }
+        // Reached the end: tear down the offscreen webview and refresh the label.
+        precomputeWebView?.removeFromSuperview()
+        precomputeWebView = nil
+        updatePageLabel()
     }
 
     private func showLoadErrorAndReturnToLibrary(message: String) {
@@ -1118,15 +1245,29 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView === precomputeWebView {
+            webView.evaluateJavaScript(readerPaginationJS()) { _, _ in
+                webView.evaluateJavaScript("(window.getTotalPages ? window.getTotalPages() : 1)") { result, _ in
+                    let pages = ((result as? Int).flatMap { $0 > 0 ? $0 : nil }) ?? 1
+                    if self.precomputeIndex >= 0, self.precomputeIndex < self.totalPagesPerSpine.count {
+                        self.totalPagesPerSpine[self.precomputeIndex] = pages
+                    }
+                    self.updatePageLabel()
+                    self.precomputeIndex += 1
+                    self.loadNextPrecomputeChapter()
+                }
+            }
+            return
+        }
         webView.evaluateJavaScript(readerPaginationJS()) { _, _ in
             let pageVC = self.findPageViewController(for: webView)
             let spineIndex = pageVC?.spineIndex ?? self.currentSpineIndex
             let targetPage = pageVC?.targetPageIndex ?? self.currentPage
+            let id = ObjectIdentifier(webView)
+            self.webViewChapter[id] = spineIndex
+            self.readyWebViews.insert(id)
+            self.applySavedHighlights(to: webView)
             self.calculateTotalPages(for: webView, spineIndex: spineIndex, requestedPage: targetPage)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                self.applySavedHighlights(to: webView)
-                webView.alpha = 1
-            }
         }
     }
 
@@ -1155,30 +1296,50 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             // If we're opening a highlight in this spine, scroll to its exact page once paginated.
             if let pending = self.pendingHighlightNavigation, pending.spineIndex == spineIndex, self.isVisibleWebView(webView) {
                 self.pendingHighlightNavigation = nil
-                self.computeHighlightPage(in: webView, highlight: pending) { computed in
-                    var target = computed
-                    if target < 0 {
-                        let rel = min(max(pending.relativePosition, 0), 1)
-                        target = Int((rel * Double(pages)).rounded(.down))
-                    }
-                    target = min(max(0, target), pages - 1)
-                    self.scrollToPage(in: webView, pageIndex: target)
-                    self.currentSpineIndex = spineIndex
-                    self.currentPage = target
-                    self.totalPages = pages
-                    self.updatePageLabel()
-                }
+                self.scrollToHighlight(pending, in: webView, pages: pages)
                 return
             }
 
             let targetPage = min(max(0, requestedPage), pages - 1)
-            self.scrollToPage(in: webView, pageIndex: targetPage)
+            self.scrollToPage(in: webView, pageIndex: targetPage) {
+                webView.alpha = 1
+            }
             if self.isVisibleWebView(webView) {
                 self.currentSpineIndex = spineIndex
                 self.currentPage = targetPage
                 self.totalPages = pages
                 self.updatePageLabel()
+                if !self.didScheduleInitialPrecompute {
+                    self.didScheduleInitialPrecompute = true
+                    self.schedulePrecompute()
+                }
             }
+        }
+    }
+
+    // Scrolls an already-paginated webview to a highlight's exact page and syncs reader state.
+    private func scrollToHighlight(_ highlight: Highlight, in webView: WKWebView, pages: Int) {
+        computeHighlightPage(in: webView, highlight: highlight) { computed in
+            var target = computed
+            if target < 0 {
+                let rel = min(max(highlight.relativePosition, 0), 1)
+                target = Int((rel * Double(pages)).rounded(.down))
+            }
+            target = min(max(0, target), pages - 1)
+            self.scrollToPage(in: webView, pageIndex: target) {
+                webView.alpha = 1
+            }
+            // Keep the page VC's index in sync so swipes step from the highlight's page.
+            if let vc = self.findPageViewController(for: webView) {
+                vc.pageIndex = target
+                vc.targetPageIndex = target
+                // Re-anchor so the pager drops stale neighbors cached at the old index.
+                self.pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+            }
+            self.currentSpineIndex = highlight.spineIndex
+            self.currentPage = target
+            self.totalPages = pages
+            self.updatePageLabel()
         }
     }
 
