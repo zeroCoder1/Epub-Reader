@@ -3,6 +3,50 @@
 
 A native EPUB reader for iPhone and iPad, rebuilt from the ground up in Swift/UIKit. It parses EPUB 3 packages and renders them in a paginated `WKWebView` with highlighting, bookmarks, a table of contents, and rich theming.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.54.18.png" alt="Paginated reading view" /><br/>
+      <sub><b>Reading view</b><br/>Paginated, page-numbered text</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.54.22.png" alt="Glass command panel" /><br/>
+      <sub><b>Command panel</b><br/>Quick actions & progress</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.54.27.png" alt="Table of contents" /><br/>
+      <sub><b>Table of contents</b><br/>Chapters with page numbers</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.54.44.png" alt="Highlighted text" /><br/>
+      <sub><b>Highlighting</b><br/>Color highlights in the text</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.54.41.png" alt="Highlights list" /><br/>
+      <sub><b>Highlights list</b><br/>Every highlight in the book</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.55.12.png" alt="Bookmarks list" /><br/>
+      <sub><b>Bookmarks</b><br/>Saved pages per book</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.54.49.png" alt="Themes and settings" /><br/>
+      <sub><b>Themes &amp; settings</b><br/>Built-in themes & font size</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="testReader/Screenshots/Simulator%20Screenshot%20-%20iPhone%2017%20-%202026-08-04%20at%2022.54.58.png" alt="Customize theme" /><br/>
+      <sub><b>Customize theme</b><br/>Fonts, spacing & margins</sub>
+    </td>
+    <td align="center" width="33%"></td>
+  </tr>
+</table>
+
 ## Features
 
 ### Library
