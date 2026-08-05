@@ -23,7 +23,7 @@ class SettingsViewController: UIViewController, UIPickerViewDataSource, UIPicker
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Settings"
-        view.backgroundColor = .white
+        view.backgroundColor = .systemBackground
         setupUI()
         loadCurrentSettings()
     }
@@ -31,6 +31,7 @@ class SettingsViewController: UIViewController, UIPickerViewDataSource, UIPicker
     private func setupUI() {
         let darkModeLabel = UILabel()
         darkModeLabel.text = "Dark Mode"
+        darkModeLabel.textColor = .label
         darkModeLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(darkModeLabel)
         darkModeSwitch.translatesAutoresizingMaskIntoConstraints = false
@@ -39,24 +40,29 @@ class SettingsViewController: UIViewController, UIPickerViewDataSource, UIPicker
         
         let bgLabel = UILabel()
         bgLabel.text = "Background Color"
+        bgLabel.textColor = .label
         bgLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bgLabel)
         backgroundColorPicker.translatesAutoresizingMaskIntoConstraints = false
+        backgroundColorPicker.backgroundColor = .systemBackground
         backgroundColorPicker.dataSource = self
         backgroundColorPicker.delegate = self
         view.addSubview(backgroundColorPicker)
         
         let fontLabel = UILabel()
         fontLabel.text = "Font Family"
+        fontLabel.textColor = .label
         fontLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(fontLabel)
         fontFamilyPicker.translatesAutoresizingMaskIntoConstraints = false
+        fontFamilyPicker.backgroundColor = .systemBackground
         fontFamilyPicker.dataSource = self
         fontFamilyPicker.delegate = self
         view.addSubview(fontFamilyPicker)
         
         let sizeLabel = UILabel()
         sizeLabel.text = "Font Size"
+        sizeLabel.textColor = .label
         sizeLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(sizeLabel)
         fontSizeSlider.translatesAutoresizingMaskIntoConstraints = false
@@ -67,15 +73,18 @@ class SettingsViewController: UIViewController, UIPickerViewDataSource, UIPicker
         
         let highlightLabel = UILabel()
         highlightLabel.text = "Highlight Color"
+        highlightLabel.textColor = .label
         highlightLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(highlightLabel)
         highlightColorPicker.translatesAutoresizingMaskIntoConstraints = false
+        highlightColorPicker.backgroundColor = .systemBackground
         highlightColorPicker.dataSource = self
         highlightColorPicker.delegate = self
         view.addSubview(highlightColorPicker)
         
         let pageCurlLabel = UILabel()
         pageCurlLabel.text = "Page Curl Animation"
+        pageCurlLabel.textColor = .label
         pageCurlLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(pageCurlLabel)
         pageCurlSwitch.translatesAutoresizingMaskIntoConstraints = false

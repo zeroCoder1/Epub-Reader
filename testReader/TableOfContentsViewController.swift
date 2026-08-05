@@ -44,7 +44,7 @@ final class TableOfContentsViewController: UIViewController, UITableViewDataSour
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(white: 0.97, alpha: 1)
+        view.backgroundColor = .systemBackground
         setupHeader()
         setupTable()
         scrollToCurrentItem()
@@ -69,7 +69,7 @@ final class TableOfContentsViewController: UIViewController, UITableViewDataSour
 
         closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
         closeButton.tintColor = .label
-        closeButton.backgroundColor = .systemGray5
+        closeButton.backgroundColor = .tertiarySystemFill
         closeButton.layer.cornerRadius = 22
         closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         closeButton.translatesAutoresizingMaskIntoConstraints = false
@@ -103,6 +103,8 @@ final class TableOfContentsViewController: UIViewController, UITableViewDataSour
     private func setupTable() {
         tableView.dataSource = self
         tableView.delegate = self
+        tableView.backgroundColor = .systemBackground
+        tableView.separatorColor = .separator
         tableView.rowHeight = 56
         tableView.separatorInset = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
         tableView.register(TOCListCell.self, forCellReuseIdentifier: "TOCListCell")
@@ -155,6 +157,7 @@ final class TOCListCell: UITableViewCell {
         container.layer.cornerRadius = 12
         container.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = .label
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         pageLabel.font = UIFont.systemFont(ofSize: 13)
         pageLabel.textColor = .secondaryLabel
@@ -179,6 +182,6 @@ final class TOCListCell: UITableViewCell {
     func configure(title: String, page: Int?, highlighted: Bool) {
         titleLabel.text = title
         pageLabel.text = page.map { "\($0)" } ?? ""
-        container.backgroundColor = highlighted ? .systemGray4 : .clear
+        container.backgroundColor = highlighted ? .tertiarySystemFill : .clear
     }
 }

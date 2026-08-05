@@ -50,7 +50,7 @@ final class CustomizeThemeViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(white: 0.94, alpha: 1)
+        view.backgroundColor = .systemGroupedBackground
         buildHeaderBar()
         buildScroll()
         loadState()
@@ -67,16 +67,16 @@ final class CustomizeThemeViewController: UIViewController {
 
         let closeButton = UIButton(type: .system)
         closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)), for: .normal)
-        closeButton.tintColor = .black
-        closeButton.backgroundColor = .white
+        closeButton.tintColor = .label
+        closeButton.backgroundColor = .secondarySystemGroupedBackground
         closeButton.layer.cornerRadius = 22
         closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         closeButton.translatesAutoresizingMaskIntoConstraints = false
 
         let doneButton = UIButton(type: .system)
         doneButton.setImage(UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)), for: .normal)
-        doneButton.tintColor = .white
-        doneButton.backgroundColor = UIColor(white: 0.2, alpha: 1)
+        doneButton.tintColor = .systemBackground
+        doneButton.backgroundColor = .label
         doneButton.layer.cornerRadius = 22
         doneButton.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
         doneButton.translatesAutoresizingMaskIntoConstraints = false
@@ -84,7 +84,7 @@ final class CustomizeThemeViewController: UIViewController {
         let title = UILabel()
         title.text = "Customize Theme"
         title.font = UIFont.systemFont(ofSize: 18, weight: .bold)
-        title.textColor = .black
+        title.textColor = .label
         title.translatesAutoresizingMaskIntoConstraints = false
 
         bar.addSubview(closeButton)
@@ -157,15 +157,15 @@ final class CustomizeThemeViewController: UIViewController {
 
     private func buildPreview() -> UIView {
         let card = UIView()
-        card.backgroundColor = UIColor(white: 0.92, alpha: 1)
+        card.backgroundColor = .secondarySystemGroupedBackground
 
         previewTitle.text = "Aa"
         previewTitle.font = UIFont(name: "Georgia", size: 44) ?? UIFont.systemFont(ofSize: 44)
-        previewTitle.textColor = .black
+        previewTitle.textColor = .label
         previewTitle.translatesAutoresizingMaskIntoConstraints = false
 
         previewBody.numberOfLines = 4
-        previewBody.textColor = .black
+        previewBody.textColor = .label
         previewBody.text = "He did not find out until the wedding that she was simple. Her father had been scrupulous about keeping her veiled until the ceremony, and my father had humored him."
         previewBody.translatesAutoresizingMaskIntoConstraints = false
 
@@ -190,7 +190,7 @@ final class CustomizeThemeViewController: UIViewController {
         let label = UILabel()
         label.text = text
         label.font = UIFont.systemFont(ofSize: 18, weight: .bold)
-        label.textColor = .black
+        label.textColor = .label
         return label
     }
 
@@ -198,7 +198,7 @@ final class CustomizeThemeViewController: UIViewController {
         let stack = UIStackView()
         stack.axis = .vertical
         stack.spacing = 0
-        stack.backgroundColor = .white
+        stack.backgroundColor = .secondarySystemGroupedBackground
         stack.layer.cornerRadius = 16
         stack.clipsToBounds = true
         stack.isLayoutMarginsRelativeArrangement = true
@@ -208,7 +208,7 @@ final class CustomizeThemeViewController: UIViewController {
 
     private func divider() -> UIView {
         let line = UIView()
-        line.backgroundColor = UIColor(white: 0.9, alpha: 1)
+        line.backgroundColor = .separator
         line.translatesAutoresizingMaskIntoConstraints = false
         line.heightAnchor.constraint(equalToConstant: 1).isActive = true
         let wrap = UIView()
@@ -234,19 +234,19 @@ final class CustomizeThemeViewController: UIViewController {
         let fontGlyph = UILabel()
         fontGlyph.text = "Aa"
         fontGlyph.font = UIFont(name: "Georgia", size: 20) ?? UIFont.systemFont(ofSize: 20)
-        fontGlyph.textColor = .black
+        fontGlyph.textColor = .label
 
         let fontLabel = UILabel()
         fontLabel.text = "Font"
         fontLabel.font = UIFont.systemFont(ofSize: 18)
-        fontLabel.textColor = .black
+        fontLabel.textColor = .label
 
         fontValueLabel.font = UIFont.systemFont(ofSize: 18)
-        fontValueLabel.textColor = UIColor(white: 0.6, alpha: 1)
+        fontValueLabel.textColor = .secondaryLabel
         fontValueLabel.textAlignment = .right
 
         let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
-        chevron.tintColor = UIColor(white: 0.6, alpha: 1)
+        chevron.tintColor = .tertiaryLabel
         chevron.contentMode = .scaleAspectFit
 
         [fontGlyph, fontLabel, fontValueLabel, chevron].forEach {
@@ -274,12 +274,12 @@ final class CustomizeThemeViewController: UIViewController {
         let boldGlyph = UILabel()
         boldGlyph.text = "B"
         boldGlyph.font = UIFont.systemFont(ofSize: 20, weight: .bold)
-        boldGlyph.textColor = .black
+        boldGlyph.textColor = .label
 
         let boldLabel = UILabel()
         boldLabel.text = "Bold Text"
         boldLabel.font = UIFont.systemFont(ofSize: 18)
-        boldLabel.textColor = .black
+        boldLabel.textColor = .label
 
         boldSwitch.addTarget(self, action: #selector(boldChanged), for: .valueChanged)
 
@@ -313,7 +313,7 @@ final class CustomizeThemeViewController: UIViewController {
         let toggleLabel = UILabel()
         toggleLabel.text = "Customize"
         toggleLabel.font = UIFont.systemFont(ofSize: 18)
-        toggleLabel.textColor = .black
+        toggleLabel.textColor = .label
 
         customizeSwitch.onTintColor = UIColor.systemGreen
         customizeSwitch.addTarget(self, action: #selector(customizeToggleChanged), for: .valueChanged)
@@ -367,20 +367,20 @@ final class CustomizeThemeViewController: UIViewController {
         let titleLabel = UILabel()
         titleLabel.text = title
         titleLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-        titleLabel.textColor = UIColor(white: 0.55, alpha: 1)
+        titleLabel.textColor = .secondaryLabel
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let iconView = UIImageView(image: UIImage(systemName: icon))
-        iconView.tintColor = .black
+        iconView.tintColor = .label
         iconView.contentMode = .scaleAspectFit
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
-        slider.minimumTrackTintColor = .black
+        slider.minimumTrackTintColor = .label
         slider.addTarget(self, action: action, for: .valueChanged)
         slider.translatesAutoresizingMaskIntoConstraints = false
 
         valueLabel.font = UIFont.systemFont(ofSize: 16)
-        valueLabel.textColor = UIColor(white: 0.4, alpha: 1)
+        valueLabel.textColor = .secondaryLabel
         valueLabel.textAlignment = .right
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -415,7 +415,7 @@ final class CustomizeThemeViewController: UIViewController {
         let label = UILabel()
         label.text = "Justify Text"
         label.font = UIFont.systemFont(ofSize: 18)
-        label.textColor = .black
+        label.textColor = .label
 
         justifySwitch.addTarget(self, action: #selector(justifyChanged), for: .valueChanged)
 
@@ -437,7 +437,7 @@ final class CustomizeThemeViewController: UIViewController {
         let group = groupContainer()
         let button = UIButton(type: .system)
         button.setTitle("Reset Theme", for: .normal)
-        button.setTitleColor(UIColor(white: 0.6, alpha: 1), for: .normal)
+        button.setTitleColor(.secondaryLabel, for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 18)
         button.addTarget(self, action: #selector(resetTapped), for: .touchUpInside)
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -517,7 +517,7 @@ final class CustomizeThemeViewController: UIViewController {
             .font: font,
             .paragraphStyle: paragraph,
             .kern: charKern,
-            .foregroundColor: UIColor.black
+            .foregroundColor: UIColor.label
         ])
         if wordExtra != 0 {
             let ns = text as NSString

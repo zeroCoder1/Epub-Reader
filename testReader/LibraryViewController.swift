@@ -16,7 +16,7 @@ class LibraryViewController: UIViewController, UITableViewDataSource, UITableVie
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "EPUB Library"
-        view.backgroundColor = .white
+        view.backgroundColor = .systemBackground
         setupNavigationBar()
         setupTableView()
         loadEpubFiles()
@@ -48,6 +48,8 @@ class LibraryViewController: UIViewController, UITableViewDataSource, UITableVie
         ])
         tableView.dataSource = self
         tableView.delegate = self
+        tableView.backgroundColor = .systemBackground
+        tableView.separatorColor = .separator
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "EpubCell")
     }
     
@@ -110,6 +112,9 @@ class LibraryViewController: UIViewController, UITableViewDataSource, UITableVie
         let fileURL = epubFiles[indexPath.row]
         let isBundledFile = fileURL.standardizedFileURL.path.hasPrefix((Bundle.main.resourceURL?.standardizedFileURL.path ?? "") + "/")
         cell.textLabel?.text = isBundledFile ? "\(fileURL.lastPathComponent) (Bundled)" : fileURL.lastPathComponent
+        cell.textLabel?.textColor = .label
+        cell.backgroundColor = .systemBackground
+        cell.contentView.backgroundColor = .systemBackground
         return cell
     }
     

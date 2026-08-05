@@ -59,7 +59,7 @@ final class HighlightsListViewController: UIViewController, UITableViewDataSourc
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(white: 0.97, alpha: 1)
+        view.backgroundColor = .systemBackground
         setupHeader()
         setupTable()
         updateHeaderText()
@@ -83,7 +83,7 @@ final class HighlightsListViewController: UIViewController, UITableViewDataSourc
 
         closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)), for: .normal)
         closeButton.tintColor = .label
-        closeButton.backgroundColor = .systemGray5
+        closeButton.backgroundColor = .tertiarySystemFill
         closeButton.layer.cornerRadius = 22
         closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         closeButton.translatesAutoresizingMaskIntoConstraints = false
@@ -126,6 +126,8 @@ final class HighlightsListViewController: UIViewController, UITableViewDataSourc
     private func setupTable() {
         tableView.dataSource = self
         tableView.delegate = self
+        tableView.backgroundColor = .systemBackground
+        tableView.separatorColor = .separator
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 72
         tableView.separatorInset = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
@@ -250,6 +252,7 @@ final class HighlightListCell: UITableViewCell {
         colorBar.translatesAutoresizingMaskIntoConstraints = false
 
         textLabel_.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+        textLabel_.textColor = .label
         textLabel_.numberOfLines = 3
         textLabel_.translatesAutoresizingMaskIntoConstraints = false
 
@@ -289,7 +292,7 @@ final class HighlightListCell: UITableViewCell {
         textLabel_.text = text
         pageLabel.text = page.map { "p. \($0)" } ?? ""
         colorBar.backgroundColor = color
-        container.backgroundColor = highlighted ? .systemGray4 : .clear
+        container.backgroundColor = highlighted ? .tertiarySystemFill : .clear
     }
 }
 
@@ -314,6 +317,7 @@ final class BookmarkListCell: UITableViewCell {
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.textColor = .label
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         dateLabel.font = UIFont.systemFont(ofSize: 13)
@@ -354,6 +358,6 @@ final class BookmarkListCell: UITableViewCell {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         dateLabel.text = formatter.string(from: date)
-        container.backgroundColor = highlighted ? .systemGray4 : .clear
+        container.backgroundColor = highlighted ? .tertiarySystemFill : .clear
     }
 }
