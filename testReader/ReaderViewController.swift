@@ -18,11 +18,10 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private var totalPages = 0
     private var totalPagesPerSpine: [Int] = [] // Track pages per chapter
     private var baseURL: URL?
-    // Shared web content process across reader webviews to cut per-webview startup cost.
-    private static let sharedProcessPool = WKProcessPool()
     // Reusable webviews returned by discarded page VCs; kept warm so same-chapter turns skip reload.
     private var idleWebViews: [WKWebView] = []
     private var webViewChapter: [ObjectIdentifier: Int] = [:] // chapter currently loaded in a webview
+    private var webViewTargetPage: [ObjectIdentifier: Int] = [:] // page a webview should show once it finishes loading
     private var readyWebViews: Set<ObjectIdentifier> = [] // webviews that finished loading + paginating
     private var lastReaderLayoutSize: CGSize = .zero // detects rotation/size changes to invalidate layouts
     // Offscreen pass that paginates every chapter so the book's total page count is accurate.
@@ -1132,28 +1131,36 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
         }
 
+        // Record the target so didFinish scrolls to the right page even before this VC is attached.
+        webViewChapter[ObjectIdentifier(webView)] = targetSpineIndex
+        webViewTargetPage[ObjectIdentifier(webView)] = pageIndex
+
         let pageVC = PageContentViewController(webView: webView, pageIndex: pageIndex, spineIndex: targetSpineIndex, delegate: self)
         pageVC.targetPageIndex = pageIndex
 
         if reusedWarm {
-            // Chapter already laid out: reveal immediately.
-            webView.alpha = 1
             if let pending = pendingHighlightNavigation, pending.spineIndex == targetSpineIndex {
                 // Honor a pending highlight jump instead of the raw requested page.
                 pendingHighlightNavigation = nil
                 let pages = max(1, totalPagesPerSpine[targetSpineIndex])
+                webView.alpha = 1
                 scrollToHighlight(pending, in: webView, pages: pages)
             } else {
-                scrollToPage(in: webView, pageIndex: pageIndex)
+                // Chapter is already laid out, but the warm webview still shows its previous
+                // page. Scroll to the target first, then reveal, so we don't flash the old page
+                // (e.g. jumping back to a chapter briefly showed page 1 before the last page).
+                webView.alpha = 0
+                scrollToPage(in: webView, pageIndex: pageIndex) {
+                    webView.alpha = 1
+                }
             }
         }
         return pageVC
     }
 
-    // Builds a reader webview sharing the process pool and reader gesture/appearance config.
+    // Builds a reader webview with reader gesture/appearance config.
     private func makeReaderWebView() -> WKWebView {
         let config = WKWebViewConfiguration()
-        config.processPool = Self.sharedProcessPool
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.scrollView.isScrollEnabled = false
@@ -1177,6 +1184,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         while idleWebViews.count > 4 {
             let evicted = idleWebViews.removeFirst()
             webViewChapter.removeValue(forKey: ObjectIdentifier(evicted))
+            webViewTargetPage.removeValue(forKey: ObjectIdentifier(evicted))
             readyWebViews.remove(ObjectIdentifier(evicted))
         }
     }
@@ -1185,6 +1193,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private func invalidateWebViewPool() {
         idleWebViews.removeAll()
         webViewChapter.removeAll()
+        webViewTargetPage.removeAll()
         readyWebViews.removeAll()
         // Page counts depend on the same layout, so recompute the book's total.
         schedulePrecompute()
@@ -1260,10 +1269,11 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             return
         }
         webView.evaluateJavaScript(readerPaginationJS()) { _, _ in
-            let pageVC = self.findPageViewController(for: webView)
-            let spineIndex = pageVC?.spineIndex ?? self.currentSpineIndex
-            let targetPage = pageVC?.targetPageIndex ?? self.currentPage
             let id = ObjectIdentifier(webView)
+            // Prefer the target captured at creation; the VC may not be attached yet when pre-fetched.
+            let pageVC = self.findPageViewController(for: webView)
+            let spineIndex = self.webViewChapter[id] ?? pageVC?.spineIndex ?? self.currentSpineIndex
+            let targetPage = self.webViewTargetPage[id] ?? pageVC?.targetPageIndex ?? self.currentPage
             self.webViewChapter[id] = spineIndex
             self.readyWebViews.insert(id)
             self.applySavedHighlights(to: webView)
