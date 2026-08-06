@@ -60,14 +60,28 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private let quickBookmarkButton = UIButton(type: .system)
     private var panelItemViews: [UIView] = []
     private var coverImage: UIImage?
+    private var bookMetadata: EPUBMetadata?
     private var isChromeVisible = false
     private var lastChromeToggleTimestamp: TimeInterval = 0
-    private lazy var bookmarksStorageKey: String = {
-        "savedBookmarks_\(epubURL.lastPathComponent)"
-    }()
-    private lazy var highlightsStorageKey: String = {
-        "savedHighlights_\(epubURL.lastPathComponent)"
-    }()
+    private var hasAppeared = false
+    private let loadingIndicator = UIActivityIndicatorView(style: .large)
+    // dc:identifier of the open book, set during parse. Persistence is keyed by this so
+    // state survives renaming the file; falls back to the filename when the OPF omits it.
+    private var bookIdentifier: String?
+    // Stable per-book key. UserDefaults keys can't contain arbitrary characters cleanly,
+    // so identifiers are reduced to an alphanumeric-safe form.
+    private var bookKey: String {
+        if let id = bookIdentifier, !id.isEmpty {
+            let safe = id.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : "_" }
+            return "id_" + String(safe)
+        }
+        return epubURL.lastPathComponent
+    }
+    // Key used before identity was identifier-based; read once to migrate old data forward.
+    private var legacyBookKey: String { epubURL.lastPathComponent }
+    private var bookmarksStorageKey: String { "savedBookmarks_\(bookKey)" }
+    private var highlightsStorageKey: String { "savedHighlights_\(bookKey)" }
+    private var readingPositionStorageKey: String { "lastReadPosition_\(bookKey)" }
     
     init(epubURL: URL) {
         self.epubURL = epubURL
@@ -85,39 +99,54 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         setupPageLabel()
         setupReaderChrome()
         
-        // Load data first before parsing EPUB
-        loadHighlights()
-        loadBookmarks()
-
-        if parseAndLoadEPUB() {
-            setupPageViewController()
-        }
         setupTOCView()
         setupHighlightsView()
         setupBookmarksView()
         setupMenuController()
         setChromeVisible(false, animated: false)
+
+        // EPUB parsing (ZIP extraction + XML) is heavy; run it off the main thread so the
+        // reader opens without blocking the UI, then build the pages when it completes.
+        loadEPUBAsync()
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        // Data already loaded in viewDidLoad, just reload table views
+        hasAppeared = true
         highlightsTableView.reloadData()
         bookmarksTableView.reloadData()
 
+        // Parse may have failed before the view was on screen; present it now.
         if let message = pendingLoadErrorMessage {
             pendingLoadErrorMessage = nil
             showLoadErrorAndReturnToLibrary(message: message)
         }
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // Catch the final location (e.g. after a TOC/bookmark jump that doesn't animate a turn).
+        saveReadingPosition()
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         // On size changes (e.g. rotation) cached column layouts are invalid; drop the warm pool.
-        if lastReaderLayoutSize != .zero, lastReaderLayoutSize != view.bounds.size {
-            invalidateWebViewPool()
-        }
+        let sizeChanged = lastReaderLayoutSize != .zero && lastReaderLayoutSize != view.bounds.size
+        // Update before any re-entrant work below so nested layout passes don't re-trigger this.
         lastReaderLayoutSize = view.bounds.size
+        if sizeChanged {
+            invalidateWebViewPool()
+            // Fixed-layout pairing depends on orientation; rebuild spreads and re-show the current one.
+            if isFixedLayoutBook {
+                rebuildSpreads()
+                if let si = spreadIndex(containingSpine: currentSpineIndex),
+                   let vc = createSpreadViewController(spreadIndex: si) {
+                    currentSpineIndex = spreads[si].left
+                    pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+                }
+            }
+        }
         ensureReaderChromeAboveContent()
     }
     
@@ -1028,25 +1057,58 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         }
     }
 
+    // Reads per-book data under the current (identifier-based) key, migrating any data still
+    // stored under the legacy filename key so highlights/bookmarks saved before this change survive.
+    private func loadPerBookData<T: Decodable>(_ type: T.Type, primaryKey: String) -> T? {
+        let defaults = UserDefaults.standard
+        let decoder = JSONDecoder()
+        if let data = defaults.object(forKey: primaryKey) as? Data,
+           let value = try? decoder.decode(T.self, from: data) {
+            return value
+        }
+        // Fall back to the legacy filename-keyed value and migrate it forward.
+        guard bookKey != legacyBookKey else { return nil }
+        let legacyKey = primaryKey.replacingOccurrences(of: "_\(bookKey)", with: "_\(legacyBookKey)")
+        if let data = defaults.object(forKey: legacyKey) as? Data,
+           let value = try? decoder.decode(T.self, from: data) {
+            defaults.set(data, forKey: primaryKey)
+            return value
+        }
+        return nil
+    }
+
     // Load bookmarks from UserDefaults
     private func loadBookmarks() {
-        if let savedBookmarks = UserDefaults.standard.object(forKey: bookmarksStorageKey) as? Data {
-            let decoder = JSONDecoder()
-            if let loadedBookmarks = try? decoder.decode([Bookmark].self, from: savedBookmarks) {
-                bookmarks = loadedBookmarks
-                print("Bookmarks loaded: \(bookmarks.count) total")
-            }
+        if let loadedBookmarks = loadPerBookData([Bookmark].self, primaryKey: bookmarksStorageKey) {
+            bookmarks = loadedBookmarks
+            print("Bookmarks loaded: \(bookmarks.count) total")
         }
     }
 
     // Load highlights from UserDefaults
     private func loadHighlights() {
-        if let savedHighlights = UserDefaults.standard.object(forKey: highlightsStorageKey) as? Data {
-            let decoder = JSONDecoder()
-            if let loadedHighlights = try? decoder.decode([Highlight].self, from: savedHighlights) {
-                highlights = loadedHighlights
-                print("Highlights loaded: \(highlights.count) total")
-            }
+        if let loadedHighlights = loadPerBookData([Highlight].self, primaryKey: highlightsStorageKey) {
+            highlights = loadedHighlights
+            print("Highlights loaded: \(highlights.count) total")
+        }
+    }
+
+    // Restore the last-read spine/page into currentSpineIndex/currentPage before the
+    // initial page view controller is built. setupPageViewController reads these.
+    private func loadReadingPosition() {
+        guard let position = loadPerBookData(ReadingPosition.self, primaryKey: readingPositionStorageKey) else { return }
+        guard position.spineIndex >= 0, position.spineIndex < spineItems.count else { return }
+        currentSpineIndex = position.spineIndex
+        currentPage = max(0, position.pageNumber)
+        print("Reading position restored: spine \(currentSpineIndex), page \(currentPage)")
+    }
+
+    // Persist the current spine/page as the last-read position.
+    private func saveReadingPosition() {
+        guard !spineItems.isEmpty else { return }
+        let position = ReadingPosition(spineIndex: currentSpineIndex, pageNumber: currentPage, date: Date())
+        if let encoded = try? JSONEncoder().encode(position) {
+            UserDefaults.standard.set(encoded, forKey: readingPositionStorageKey)
         }
     }
 
@@ -1188,7 +1250,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     private func globalPageNumber(forSpineIndex spineIndex: Int) -> Int {
         var page = 1
-        for i in 0..<spineIndex where i < totalPagesPerSpine.count { page += totalPagesPerSpine[i] }
+        for i in 0..<spineIndex where i < totalPagesPerSpine.count && isLinearSpine(i) { page += totalPagesPerSpine[i] }
         return page
     }
 
@@ -1219,24 +1281,115 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         highlightsTableView.reloadData()
     }
 
-    private func parseAndLoadEPUB() -> Bool {
-        guard let (metadata, spine, toc, baseURL) = EPUBParser.parseEPUB(at: epubURL) else {
-            pendingLoadErrorMessage = "Failed to parse EPUB package data."
-            return false
+    // Everything needed to build the reader UI, produced off the main thread.
+    private struct ParsedBook {
+        let metadata: EPUBMetadata
+        let spine: [EPUBSpineItem]
+        let toc: [EPUBTOCItem]
+        let baseURL: URL
+        let coverImage: UIImage?
+    }
+
+    private enum ReaderLoadError: LocalizedError {
+        case message(String)
+        var errorDescription: String? { if case .message(let m) = self { return m }; return nil }
+    }
+
+    // Parses the EPUB on a background queue, then applies the result (or shows an error) on main.
+    private func loadEPUBAsync() {
+        showLoadingIndicator()
+        let url = epubURL
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let outcome: Result<ParsedBook, Error>
+            do {
+                guard let parsed = try EPUBParser.parseEPUB(at: url) else {
+                    throw ReaderLoadError.message("Failed to parse EPUB package data.")
+                }
+                guard !parsed.spine.isEmpty else {
+                    throw ReaderLoadError.message("EPUB parsed, but no spine items were found.")
+                }
+                var cover: UIImage? = nil
+                if let coverURL = parsed.metadata.coverImageURL, let data = try? Data(contentsOf: coverURL) {
+                    cover = UIImage(data: data)
+                }
+                outcome = .success(ParsedBook(metadata: parsed.metadata, spine: parsed.spine,
+                                              toc: parsed.toc, baseURL: parsed.baseURL, coverImage: cover))
+            } catch {
+                outcome = .failure(error)
+            }
+            DispatchQueue.main.async {
+                guard let self = self else {
+                    // Reader was dismissed mid-parse: don't leak the extraction we just created.
+                    if case .success(let book) = outcome { EPUBParser.cleanupExtraction(at: book.baseURL) }
+                    return
+                }
+                self.hideLoadingIndicator()
+                switch outcome {
+                case .success(let book):
+                    self.applyParsedBook(book)
+                case .failure(let error):
+                    let message = (error as? LocalizedError)?.errorDescription ?? "Failed to open this EPUB."
+                    if self.hasAppeared {
+                        self.showLoadErrorAndReturnToLibrary(message: message)
+                    } else {
+                        self.pendingLoadErrorMessage = message
+                    }
+                }
+            }
         }
-        guard !spine.isEmpty else {
-            pendingLoadErrorMessage = "EPUB parsed, but no spine items were found."
-            return false
+    }
+
+    // Main-thread: install the parsed book and build the reading UI.
+    private func applyParsedBook(_ book: ParsedBook) {
+        title = book.metadata.title
+        bookIdentifier = book.metadata.identifier
+        bookMetadata = book.metadata
+        spineItems = book.spine
+        tocItems = book.toc
+        baseURL = book.baseURL
+        coverImage = book.coverImage
+        totalPagesPerSpine = Array(repeating: 1, count: book.spine.count)
+
+        // Start on the first linear chapter (a book can open with non-linear front matter).
+        currentSpineIndex = spineItems.firstIndex(where: { $0.linear }) ?? 0
+
+        let fxlCount = spineItems.filter { $0.isFixedLayout }.count
+        print("FXL diagnostic: \(fxlCount)/\(spineItems.count) spine items are fixed-layout; rendition:spread=\(bookMetadata?.renditionSpread ?? "nil")")
+
+        // Identity is now known, so per-book state keys are valid.
+        loadHighlights()
+        loadBookmarks()
+        loadReadingPosition()
+        setupPageViewController()
+        tocTableView.reloadData()
+        highlightsTableView.reloadData()
+        bookmarksTableView.reloadData()
+    }
+
+    private func showLoadingIndicator() {
+        loadingIndicator.hidesWhenStopped = true
+        loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
+        if loadingIndicator.superview == nil {
+            view.addSubview(loadingIndicator)
+            NSLayoutConstraint.activate([
+                loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+            ])
         }
-        title = metadata.title
-        spineItems = spine
-        tocItems = toc
-        self.baseURL = baseURL
-        if let coverURL = metadata.coverImageURL, let data = try? Data(contentsOf: coverURL) {
-            coverImage = UIImage(data: data)
+        view.bringSubviewToFront(loadingIndicator)
+        loadingIndicator.startAnimating()
+    }
+
+    private func hideLoadingIndicator() {
+        loadingIndicator.stopAnimating()
+    }
+
+    deinit {
+        precomputeWorkItem?.cancel()
+        // Remove this book's extracted files when the reader goes away.
+        if let baseURL = baseURL {
+            EPUBParser.cleanupExtraction(at: baseURL)
         }
-        totalPagesPerSpine = Array(repeating: 1, count: spine.count)
-        return true
     }
     
     private func createPageViewController(for pageIndex: Int, spineIndex: Int? = nil) -> PageContentViewController? {
@@ -1880,11 +2033,14 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private func updatePageLabel() {
+        // Page counts aren't known until the async parse populates totalPagesPerSpine.
+        guard !totalPagesPerSpine.isEmpty else {
+            pageLabel.text = ""
+            return
+        }
         let globalPageNumber = getCurrentGlobalPageNumber()
         let totalGlobalPages = getTotalGlobalPages()
         pageLabel.text = pageLabelShowsTotal ? "\(globalPageNumber) of \(totalGlobalPages)" : "\(globalPageNumber)"
-
-        let pagesLeftInChapter = max(0, totalPagesPerSpine[currentSpineIndex] - currentPage - 1)
         updateBookmarkButtonState()
     }
 
@@ -1895,44 +2051,77 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     
     private func getCurrentGlobalPageNumber() -> Int {
         var globalPage = 1
-        for i in 0..<currentSpineIndex {
+        let upTo = min(currentSpineIndex, totalPagesPerSpine.count)
+        for i in 0..<upTo where isLinearSpine(i) {
             globalPage += totalPagesPerSpine[i]
         }
         globalPage += currentPage
         return globalPage
     }
-    
+
+    // Non-linear spine items don't participate in the page-count sequence.
+    private func isLinearSpine(_ index: Int) -> Bool {
+        return index < spineItems.count ? spineItems[index].linear : true
+    }
+
     private func getTotalGlobalPages() -> Int {
-        return totalPagesPerSpine.reduce(0, +)
+        var total = 0
+        for i in 0..<totalPagesPerSpine.count where isLinearSpine(i) {
+            total += totalPagesPerSpine[i]
+        }
+        return total
     }
     
     // MARK: - UIPageViewController DataSource
+    // Nearest spine index in the given direction that is part of the primary reading order
+    // (linear="no" items are skipped by page turns). Returns nil at the ends.
+    private func nextLinearSpineIndex(after index: Int) -> Int? {
+        var i = index + 1
+        while i < spineItems.count { if spineItems[i].linear { return i }; i += 1 }
+        return nil
+    }
+    private func previousLinearSpineIndex(before index: Int) -> Int? {
+        var i = index - 1
+        while i >= 0 { if spineItems[i].linear { return i }; i -= 1 }
+        return nil
+    }
+
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
         guard let current = viewController as? PageContentViewController else { return nil }
-        
+
+        // Fixed-layout books step by spread, not by column page.
+        if isFixedLayoutBook {
+            guard let si = spreadIndex(containingSpine: current.spineIndex), si > 0 else { return nil }
+            return createSpreadViewController(spreadIndex: si - 1)
+        }
+
         if current.pageIndex > 0 {
             // Previous page in same chapter
             let previousPage = current.pageIndex - 1
             return createPageViewController(for: previousPage, spineIndex: current.spineIndex)
-        } else if current.spineIndex > 0 {
-            // Move to previous chapter, last page
-            let previousSpine = current.spineIndex - 1
+        } else if let previousSpine = previousLinearSpineIndex(before: current.spineIndex) {
+            // Move to previous linear chapter, last page
             let lastPage = max(0, totalPagesPerSpine[previousSpine] - 1)
             return createPageViewController(for: lastPage, spineIndex: previousSpine)
         }
         return nil
     }
-    
+
     func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
         guard let current = viewController as? PageContentViewController else { return nil }
-        
+
+        // Fixed-layout books step by spread, not by column page.
+        if isFixedLayoutBook {
+            guard let si = spreadIndex(containingSpine: current.spineIndex), si < spreads.count - 1 else { return nil }
+            return createSpreadViewController(spreadIndex: si + 1)
+        }
+
         if current.pageIndex < totalPagesPerSpine[current.spineIndex] - 1 {
             // Next page in same chapter
             let nextPage = current.pageIndex + 1
             return createPageViewController(for: nextPage, spineIndex: current.spineIndex)
-        } else if current.spineIndex < spineItems.count - 1 {
-            // Move to next chapter, first page
-            let nextSpine = current.spineIndex + 1
+        } else if let nextSpine = nextLinearSpineIndex(after: current.spineIndex) {
+            // Move to next linear chapter, first page
             return createPageViewController(for: 0, spineIndex: nextSpine)
         }
         return nil
@@ -1944,6 +2133,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             currentPage = current.pageIndex
             totalPages = totalPagesPerSpine[currentSpineIndex]
             updatePageLabel()
+            saveReadingPosition()
         }
     }
     
