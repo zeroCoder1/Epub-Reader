@@ -92,13 +92,21 @@ class EPUBParser {
                 }
             }
             
-            // Extract TOC path
-            let tocID = try doc.select("spine").attr("toc")
+            // Extract TOC path. EPUB3 declares the nav document via a manifest item with
+            // properties="nav"; EPUB2 points spine[toc] at an NCX. Prefer the EPUB3 nav, then
+            // fall back to the NCX so pure-EPUB3 books (no spine[toc]) still get a TOC.
             var tocItem: Element? = nil
-            for item in manifestItems {
-                if (try? item.attr("id")) == tocID {
-                    tocItem = item
-                    break
+            for item in manifestItems where ((try? item.attr("properties")) ?? "").split(separator: " ").contains("nav") {
+                tocItem = item
+                break
+            }
+            if tocItem == nil {
+                let tocID = try doc.select("spine").attr("toc")
+                if !tocID.isEmpty {
+                    for item in manifestItems where (try? item.attr("id")) == tocID {
+                        tocItem = item
+                        break
+                    }
                 }
             }
             let tocPath = try tocItem?.attr("href") ?? ""
@@ -116,14 +124,23 @@ class EPUBParser {
         do {
             var tocItems: [EPUBTOCItem] = []
 
-            // EPUB3 TOC (XHTML nav)
-            let navLinks = try doc.select("nav a")
-            for link in navLinks {
-                let label = try link.text().trimmingCharacters(in: .whitespacesAndNewlines)
-                let href = try link.attr("href")
-                if !label.isEmpty, !href.isEmpty {
-                    let normalizedHref = normalizeTOCHref(href, tocURL: url, rootURL: rootURL)
-                    tocItems.append(EPUBTOCItem(label: label, href: normalizedHref))
+            // EPUB3 TOC (XHTML nav). A nav document can also hold landmarks and page-list navs,
+            // so prefer the <nav epub:type="toc"> and only fall back to the first nav.
+            let navs = try doc.select("nav")
+            var tocNav: Element? = nil
+            for nav in navs.array() where ((try? nav.attr("epub:type")) ?? "").split(separator: " ").contains("toc") {
+                tocNav = nav
+                break
+            }
+            if let navContainer = tocNav ?? navs.first() {
+                let navLinks = try navContainer.select("a")
+                for link in navLinks {
+                    let label = try link.text().trimmingCharacters(in: .whitespacesAndNewlines)
+                    let href = try link.attr("href")
+                    if !label.isEmpty, !href.isEmpty {
+                        let normalizedHref = normalizeTOCHref(href, tocURL: url, rootURL: rootURL)
+                        tocItems.append(EPUBTOCItem(label: label, href: normalizedHref))
+                    }
                 }
             }
 
