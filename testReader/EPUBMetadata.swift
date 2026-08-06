@@ -12,11 +12,72 @@ struct EPUBMetadata {
     let title: String
     let author: String
     let coverImageURL: URL?
+    // dc:identifier from the OPF (e.g. a UUID or ISBN). Used to key per-book
+    // persistence so state survives renaming the file. nil when the OPF omits it.
+    let identifier: String?
+    // Additional Dublin Core metadata; nil when the OPF omits the element.
+    let language: String?
+    let publisher: String?
+    let bookDescription: String?
+    let publicationDate: String?
+    // Book-level rendition:spread (none/landscape/portrait/both/auto); nil ⇒ default (auto).
+    let renditionSpread: String?
+
+    init(title: String, author: String, coverImageURL: URL?, identifier: String?,
+         language: String? = nil, publisher: String? = nil,
+         bookDescription: String? = nil, publicationDate: String? = nil,
+         renditionSpread: String? = nil) {
+        self.title = title
+        self.author = author
+        self.coverImageURL = coverImageURL
+        self.identifier = identifier
+        self.language = language
+        self.publisher = publisher
+        self.bookDescription = bookDescription
+        self.publicationDate = publicationDate
+        self.renditionSpread = renditionSpread
+    }
+}
+
+// Last-read location within a book, persisted so the reader reopens where it left off.
+struct ReadingPosition: Codable {
+    let spineIndex: Int
+    let pageNumber: Int
+    let date: Date
+}
+
+// Which half of a two-page spread a fixed-layout page occupies (rendition:page-spread-*).
+// .center means the page stands alone (e.g. a cover). .auto lets the reader decide by order.
+enum PageSpread: String, Codable {
+    case left, right, center, auto
+}
+
+// A fixed-layout viewing unit: one page (right == nil) or two side-by-side pages.
+struct Spread {
+    let left: Int
+    let right: Int?
 }
 
 struct EPUBSpineItem {
     let id: String
     let href: String
+    // false when the itemref carries linear="no" (supplementary content such as
+    // endnotes/pop-ups): kept in the spine for link/TOC resolution and index stability,
+    // but skipped by the primary page-turn sequence and page-count math.
+    let linear: Bool
+    // true for pre-paginated (fixed-layout) content — the page is authored to an exact
+    // viewport and must be scaled to fit rather than reflowed into columns.
+    let isFixedLayout: Bool
+    // Which side of a spread this page sits on (fixed-layout only); used for pairing pages.
+    let pageSpread: PageSpread
+
+    init(id: String, href: String, linear: Bool = true, isFixedLayout: Bool = false, pageSpread: PageSpread = .auto) {
+        self.id = id
+        self.href = href
+        self.linear = linear
+        self.isFixedLayout = isFixedLayout
+        self.pageSpread = pageSpread
+    }
 }
 
 struct EPUBTOCItem {
