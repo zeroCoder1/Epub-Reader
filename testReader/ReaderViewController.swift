@@ -729,7 +729,14 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         }
         // Derive page numbers from each highlight's stable position, not the stored snapshot.
         let pageNumbers: [Int?] = highlights.map { derivedGlobalPage(forSpineIndex: $0.spineIndex, relativePosition: $0.relativePosition) }
-        let bookmarkPageNumbers: [Int?] = bookmarks.map { globalPageNumber(forSpineIndex: $0.spineIndex) + $0.pageNumber }
+        // Match the page the bookmark will actually navigate to: derive from the relative
+        // anchor when present, else the stored page number.
+        let bookmarkPageNumbers: [Int?] = bookmarks.map { bookmark in
+            if let relativePosition = bookmark.relativePosition {
+                return derivedGlobalPage(forSpineIndex: bookmark.spineIndex, relativePosition: relativePosition)
+            }
+            return globalPageNumber(forSpineIndex: bookmark.spineIndex) + bookmark.pageNumber
+        }
         let vc = HighlightsListViewController(highlights: highlights,
                                              pageNumbers: pageNumbers,
                                              bookmarks: bookmarks,
@@ -751,12 +758,60 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private func openBookmark(_ bookmark: Bookmark) {
+        if isFixedLayoutBook { showSpine(bookmark.spineIndex); return }
         currentSpineIndex = bookmark.spineIndex
-        currentPage = bookmark.pageNumber
+        // Exact anchor: if the bookmark stored a text offset, jump to whatever page now holds
+        // that text (font-size independent), mirroring how highlights navigate.
+        if bookmark.startOffset != nil {
+            pendingBookmarkNavigation = bookmark
+            currentPage = 0
+            if let newPage = createPageViewController(for: 0, spineIndex: currentSpineIndex) {
+                pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+            }
+            updatePageLabel()
+            return
+        }
+        // Legacy bookmarks: prefer the relative anchor when the chapter is already paginated,
+        // otherwise fall back to the stored page number.
+        let paginated = currentSpineIndex < totalPagesPerSpine.count && totalPagesPerSpine[currentSpineIndex] > 1
+        if paginated, let relativePosition = bookmark.relativePosition {
+            let pages = max(1, totalPagesPerSpine[currentSpineIndex])
+            currentPage = min(pages - 1, Int((min(max(relativePosition, 0), 1) * Double(pages)).rounded(.down)))
+        } else {
+            currentPage = bookmark.pageNumber
+        }
         if let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
             pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
         }
         updatePageLabel()
+    }
+
+    // Scrolls an already-paginated webview to a bookmark's exact page (from its text offset)
+    // and syncs reader state. Falls back to the relative/page anchor if the offset is unlocatable.
+    private func scrollToBookmark(_ bookmark: Bookmark, in webView: WKWebView, pages: Int) {
+        computePage(forOffset: bookmark.startOffset ?? -1, length: 1, in: webView) { computed in
+            var target = computed
+            if target < 0 {
+                if let relativePosition = bookmark.relativePosition {
+                    target = Int((min(max(relativePosition, 0), 1) * Double(pages)).rounded(.down))
+                } else {
+                    target = bookmark.pageNumber
+                }
+            }
+            target = min(max(0, target), pages - 1)
+            self.scrollToPage(in: webView, pageIndex: target) {
+                webView.alpha = 1
+            }
+            if let vc = self.findPageViewController(for: webView) {
+                vc.pageIndex = target
+                vc.targetPageIndex = target
+                self.pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+            }
+            self.currentSpineIndex = bookmark.spineIndex
+            self.currentPage = target
+            self.totalPages = pages
+            self.updatePageLabel()
+        }
     }
 
     private func deleteBookmark(_ bookmark: Bookmark) {
@@ -844,14 +899,83 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         return bookmarks.contains { $0.spineIndex == currentSpineIndex && $0.pageNumber == currentPage }
     }
 
+    // Fraction (0...1) of the current page within its chapter, so bookmarks can be
+    // re-derived after repagination.
+    private func currentRelativePosition() -> Double {
+        guard currentSpineIndex >= 0, currentSpineIndex < totalPagesPerSpine.count else { return 0 }
+        let pages = max(1, totalPagesPerSpine[currentSpineIndex])
+        return Double(currentPage) / Double(pages)
+    }
+
+    // JS that returns the UTF-16 offset (into body.textContent) of the first text at the
+    // top-left of the currently visible page, or -1 if none is found (e.g. an image page).
+    private func topOfPageOffsetJS() -> String {
+        return """
+        (function() {
+            var doc = window.document, body = doc.body;
+            if (!body) return -1;
+            var cs = window.getComputedStyle(body);
+            var padL = parseFloat(cs.paddingLeft) || 0;
+            var padR = parseFloat(cs.paddingRight) || 0;
+            var padT = parseFloat(cs.paddingTop) || 0;
+            var usableW = (body.clientWidth || 0) - padL - padR;
+            var maxY = body.clientHeight || 400;
+            // Probe INSIDE the visible column (not the left edge, where a caret resolves to the
+            // previous column's boundary and lands us one page early). Any hit here is on the
+            // current page, which is what determines the target page.
+            var xs = [padL + usableW * 0.35, padL + usableW * 0.15, padL + usableW * 0.55];
+            var range = null;
+            for (var y = padT + 2; y < maxY && !range; y += 16) {
+                for (var i = 0; i < xs.length; i++) {
+                    var r = doc.caretRangeFromPoint ? doc.caretRangeFromPoint(xs[i], y) : null;
+                    if (r && r.startContainer && r.startContainer.nodeType === 3
+                        && r.startContainer.textContent.trim().length > 0) { range = r; break; }
+                }
+            }
+            if (!range) return -1;
+            var walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+            var total = 0, node, target = range.startContainer;
+            while (node = walker.nextNode()) {
+                if (node === target) return total + range.startOffset;
+                total += node.textContent.length;
+            }
+            return -1;
+        })();
+        """
+    }
+
+    // Builds a bookmark for the current location, capturing an exact text-offset anchor from
+    // the visible webview when possible, then hands it to `completion`.
+    private func makeCurrentBookmark(completion: @escaping (Bookmark) -> Void) {
+        let spineIndex = currentSpineIndex
+        let pageNumber = currentPage
+        let relative = currentRelativePosition()
+        let build: (Int?) -> Bookmark = { offset in
+            Bookmark(spineIndex: spineIndex, pageNumber: pageNumber, date: Date(),
+                     relativePosition: relative, startOffset: offset)
+        }
+        guard let webView = (pageViewController.viewControllers?.first as? PageContentViewController)?.webView else {
+            completion(build(nil)); return
+        }
+        webView.evaluateJavaScript(topOfPageOffsetJS()) { result, _ in
+            let offset = (result as? Int).flatMap { $0 >= 0 ? $0 : nil }
+            completion(build(offset))
+        }
+    }
+
     @objc private func toggleBookmarkCurrentPage() {
         if let idx = bookmarks.firstIndex(where: { $0.spineIndex == currentSpineIndex && $0.pageNumber == currentPage }) {
             bookmarks.remove(at: idx)
+            saveBookmarks()
+            updateBookmarkButtonState()
         } else {
-            bookmarks.append(Bookmark(spineIndex: currentSpineIndex, pageNumber: currentPage, date: Date()))
+            makeCurrentBookmark { [weak self] bookmark in
+                guard let self = self else { return }
+                self.bookmarks.append(bookmark)
+                self.saveBookmarks()
+                self.updateBookmarkButtonState()
+            }
         }
-        saveBookmarks()
-        updateBookmarkButtonState()
     }
 
     private func updateBookmarkButtonState() {
@@ -882,15 +1006,17 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     // Add bookmark
     @objc func addBookmark() {
-        let bookmark = Bookmark(spineIndex: currentSpineIndex, pageNumber: currentPage, date: Date())
-        bookmarks.append(bookmark)
-        saveBookmarks()
-        print("Bookmark added: \(bookmark)")
-        
-        // Show confirmation
-        let alert = UIAlertController(title: "Bookmark Added", message: "Page bookmarked successfully", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+        makeCurrentBookmark { [weak self] bookmark in
+            guard let self = self else { return }
+            self.bookmarks.append(bookmark)
+            self.saveBookmarks()
+            print("Bookmark added: \(bookmark)")
+
+            // Show confirmation
+            let alert = UIAlertController(title: "Bookmark Added", message: "Page bookmarked successfully", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
+        }
     }
 
     // Save bookmarks to UserDefaults
@@ -1041,6 +1167,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                                                  pageNumbers: pageNumbers,
                                                  currentItemIndex: currentItemIndex,
                                                  bookTitle: title ?? "",
+                                                 metadata: bookMetadata,
                                                  coverImage: coverImage,
                                                  pageSummary: summary) { [weak self] item in
             self?.navigate(toTOCItem: item)
@@ -1158,6 +1285,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 let pages = max(1, totalPagesPerSpine[targetSpineIndex])
                 webView.alpha = 1
                 scrollToHighlight(pending, in: webView, pages: pages)
+            } else if let pending = pendingBookmarkNavigation, pending.spineIndex == targetSpineIndex {
+                // Honor a pending bookmark jump instead of the raw requested page.
+                pendingBookmarkNavigation = nil
+                let pages = max(1, totalPagesPerSpine[targetSpineIndex])
+                webView.alpha = 1
+                scrollToBookmark(pending, in: webView, pages: pages)
             } else {
                 // Chapter is already laid out, but the warm webview still shows its previous
                 // page. Scroll to the target first, then reveal, so we don't flash the old page
@@ -1362,6 +1495,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 self.scrollToHighlight(pending, in: webView, pages: pages)
                 return
             }
+            // Same for a pending bookmark jump.
+            if let pending = self.pendingBookmarkNavigation, pending.spineIndex == spineIndex, self.isVisibleWebView(webView) {
+                self.pendingBookmarkNavigation = nil
+                self.scrollToBookmark(pending, in: webView, pages: pages)
+                return
+            }
 
             let targetPage = min(max(0, requestedPage), pages - 1)
             self.scrollToPage(in: webView, pageIndex: targetPage) {
@@ -1408,9 +1547,16 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     // Computes the exact column/page index of a highlight from its stored text offset.
     private func computeHighlightPage(in webView: WKWebView, highlight: Highlight, completion: @escaping (Int) -> Void) {
-        let start = highlight.startOffset ?? -1
+        computePage(forOffset: highlight.startOffset ?? -1, length: max(1, highlight.range.length),
+                    in: webView, completion: completion)
+    }
+
+    // Maps a UTF-16 text offset in the chapter's textContent to its current column/page index.
+    // Returns -1 when the offset is invalid or can't be located. Font-size independent, so it
+    // gives the exact page after repagination.
+    private func computePage(forOffset start: Int, length rawLength: Int, in webView: WKWebView, completion: @escaping (Int) -> Void) {
         guard start >= 0 else { completion(-1); return }
-        let length = max(1, highlight.range.length)
+        let length = max(1, rawLength)
         let js = """
         (function() {
             var doc = window.document;

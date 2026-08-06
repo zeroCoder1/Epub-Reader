@@ -89,7 +89,37 @@ struct Bookmark: Codable {
     let spineIndex: Int
     let pageNumber: Int
     let date: Date
-    
+    // Position within the chapter as a 0...1 fraction, so the bookmark survives
+    // repagination (font-size changes). nil for bookmarks saved before this field
+    // existed — those fall back to pageNumber (nil is distinct from a genuine 0).
+    let relativePosition: Double?
+    // Absolute UTF-16 offset of the text at the top of the bookmarked page within the
+    // chapter's textContent. This is the exact anchor (like a highlight): navigation lands
+    // on whatever page now contains this text, regardless of font size. nil for legacy
+    // bookmarks or pages with no probeable text (falls back to relativePosition/pageNumber).
+    let startOffset: Int?
+
+    init(spineIndex: Int, pageNumber: Int, date: Date, relativePosition: Double? = nil, startOffset: Int? = nil) {
+        self.spineIndex = spineIndex
+        self.pageNumber = pageNumber
+        self.date = date
+        self.relativePosition = relativePosition
+        self.startOffset = startOffset
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case spineIndex, pageNumber, date, relativePosition, startOffset
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        spineIndex = try container.decode(Int.self, forKey: .spineIndex)
+        pageNumber = try container.decode(Int.self, forKey: .pageNumber)
+        date = try container.decode(Date.self, forKey: .date)
+        relativePosition = try container.decodeIfPresent(Double.self, forKey: .relativePosition)
+        startOffset = try container.decodeIfPresent(Int.self, forKey: .startOffset)
+    }
+
     // Computed property for display in bookmarks list
     var displayText: String {
         let formatter = DateFormatter()
