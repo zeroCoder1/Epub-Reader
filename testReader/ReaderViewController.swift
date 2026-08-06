@@ -35,6 +35,8 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private var bookmarks: [Bookmark] = []
     private var highlights: [Highlight] = []
     private var pendingHighlightNavigation: Highlight? // Highlight to scroll to once its spine finishes paginating
+    private var pendingBookmarkNavigation: Bookmark? // Bookmark to scroll to once its spine finishes paginating
+    private var spreads: [Spread] = [] // fixed-layout viewing units (one or two pages each)
     private let tocTableView = UITableView()
     private let highlightsTableView = UITableView()
     private var tocItems: [EPUBTOCItem] = []
@@ -248,9 +250,18 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             pageViewController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
 
-        // Load the initial page
-        if let initialPage = createPageViewController(for: currentPage) {
-            pageViewController.setViewControllers([initialPage], direction: .forward, animated: false)
+        // Load the initial page — a spread for fixed-layout books, a column page otherwise.
+        let initial: PageContentViewController?
+        if isFixedLayoutBook {
+            rebuildSpreads()
+            let si = spreadIndex(containingSpine: currentSpineIndex) ?? 0
+            initial = createSpreadViewController(spreadIndex: si)
+            if si < spreads.count { currentSpineIndex = spreads[si].left }
+        } else {
+            initial = createPageViewController(for: currentPage)
+        }
+        if let initial {
+            pageViewController.setViewControllers([initial], direction: .forward, animated: false)
         } else {
             pendingLoadErrorMessage = "No readable chapter was found in this EPUB spine."
         }
@@ -775,6 +786,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private func openHighlight(_ highlight: Highlight) {
+        if isFixedLayoutBook { showSpine(highlight.spineIndex); return }
         currentSpineIndex = highlight.spineIndex
         currentPage = 0
         pendingHighlightNavigation = highlight
@@ -1063,6 +1075,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     private func navigate(toTOCItem item: EPUBTOCItem) {
         guard let index = spineIndex(forTOCItem: item) else { return }
+        if isFixedLayoutBook { showSpine(index); return }
         currentSpineIndex = index
         currentPage = 0
         if let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
@@ -1253,9 +1266,49 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         present(alert, animated: true)
     }
     
+    // Keep chapter loads inside the reader; route taps on external links (http/https/mailto/tel)
+    // out to the system so they can't hijack the reading WebView with no way back.
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.allow)
+            return
+        }
+        let scheme = url.scheme?.lowercased()
+        // File loads (chapters, in-book anchors) and blank pages stay in the reader.
+        if scheme == "file" || scheme == "about" || scheme == nil {
+            decisionHandler(.allow)
+            return
+        }
+        // Anything else is an outbound link: hand it to the OS, never the reading WebView.
+        if navigationAction.navigationType == .linkActivated
+            || scheme == "http" || scheme == "https" || scheme == "mailto" || scheme == "tel" {
+            decisionHandler(.cancel)
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            }
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    // The WebKit content process can be killed under memory pressure, leaving a blank page.
+    // Reload the chapter the crashed webview was showing so the reader recovers on its own.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        let id = ObjectIdentifier(webView)
+        readyWebViews.remove(id)
+        guard let baseURL = baseURL,
+              let spineIndex = webViewChapter[id],
+              spineIndex >= 0, spineIndex < spineItems.count else { return }
+        let chapterURL = baseURL.appendingPathComponent(spineItems[spineIndex].href)
+        guard FileManager.default.fileExists(atPath: chapterURL.path) else { return }
+        webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === precomputeWebView {
-            webView.evaluateJavaScript(readerPaginationJS()) { _, _ in
+            webView.evaluateJavaScript(renderingJS(forSpineIndex: precomputeIndex)) { _, _ in
                 webView.evaluateJavaScript("(window.getTotalPages ? window.getTotalPages() : 1)") { result, _ in
                     let pages = ((result as? Int).flatMap { $0 > 0 ? $0 : nil }) ?? 1
                     if self.precomputeIndex >= 0, self.precomputeIndex < self.totalPagesPerSpine.count {
@@ -1268,11 +1321,11 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             }
             return
         }
-        webView.evaluateJavaScript(readerPaginationJS()) { _, _ in
-            let id = ObjectIdentifier(webView)
-            // Prefer the target captured at creation; the VC may not be attached yet when pre-fetched.
-            let pageVC = self.findPageViewController(for: webView)
-            let spineIndex = self.webViewChapter[id] ?? pageVC?.spineIndex ?? self.currentSpineIndex
+        // Prefer the target captured at creation; the VC may not be attached yet when pre-fetched.
+        let id = ObjectIdentifier(webView)
+        let pageVC = self.findPageViewController(for: webView)
+        let spineIndex = self.webViewChapter[id] ?? pageVC?.spineIndex ?? self.currentSpineIndex
+        webView.evaluateJavaScript(renderingJS(forSpineIndex: spineIndex)) { _, _ in
             let targetPage = self.webViewTargetPage[id] ?? pageVC?.targetPageIndex ?? self.currentPage
             self.webViewChapter[id] = spineIndex
             self.readyWebViews.insert(id)
@@ -1478,6 +1531,199 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         """
     }
 
+    private func isFixedLayoutSpine(_ index: Int) -> Bool {
+        return index >= 0 && index < spineItems.count && spineItems[index].isFixedLayout
+    }
+
+    // A fully fixed-layout book uses the spread pager (a "spread" may be one or two pages).
+    private var isFixedLayoutBook: Bool {
+        let linear = spineItems.filter { $0.linear }
+        return !linear.isEmpty && linear.allSatisfy { $0.isFixedLayout }
+    }
+
+    private var isLandscape: Bool { view.bounds.width > view.bounds.height }
+
+    // Whether pages should pair into two-up spreads right now, per rendition:spread × orientation.
+    private func spreadPairingActive() -> Bool {
+        switch (bookMetadata?.renditionSpread ?? "auto") {
+        case "none": return false
+        case "both": return true
+        case "portrait": return !isLandscape
+        default: return isLandscape // "auto" / "landscape"
+        }
+    }
+
+    // Builds the ordered list of spreads from the linear fixed-layout spine, honoring
+    // page-spread-left/right/center and pairing consecutive pages when active.
+    private func computeSpreads() -> [Spread] {
+        let indices = (0..<spineItems.count).filter { spineItems[$0].linear }
+        guard spreadPairingActive() else { return indices.map { Spread(left: $0, right: nil) } }
+        var result: [Spread] = []
+        var i = 0
+        var isFirst = true
+        while i < indices.count {
+            let idx = indices[i]
+            let item = spineItems[idx]
+            // Cover / explicit-center pages stand alone; the first page is solo unless it's a left.
+            if item.pageSpread == .center || (isFirst && item.pageSpread != .left) {
+                result.append(Spread(left: idx, right: nil)); i += 1; isFirst = false; continue
+            }
+            isFirst = false
+            if i + 1 < indices.count {
+                let next = spineItems[indices[i + 1]]
+                if next.pageSpread == .center || next.pageSpread == .left {
+                    result.append(Spread(left: idx, right: nil)); i += 1   // no valid right partner
+                } else {
+                    result.append(Spread(left: idx, right: indices[i + 1])); i += 2
+                }
+            } else {
+                result.append(Spread(left: idx, right: nil)); i += 1
+            }
+        }
+        return result
+    }
+
+    private func rebuildSpreads() { spreads = computeSpreads() }
+
+    private func spreadIndex(containingSpine spineIndex: Int) -> Int? {
+        return spreads.firstIndex { $0.left == spineIndex || $0.right == spineIndex }
+    }
+
+    // Acquires a webview showing a fixed-layout spine item, reusing the warm pool. fixedLayoutJS
+    // runs on didFinish and fits the page to whatever bounds the webview ends up with (full or half).
+    private func acquireFXLWebView(forSpine spineIndex: Int) -> WKWebView? {
+        guard let baseURL = baseURL, spineIndex >= 0, spineIndex < spineItems.count else { return nil }
+        let chapterURL = baseURL.appendingPathComponent(spineItems[spineIndex].href)
+        guard FileManager.default.fileExists(atPath: chapterURL.path) else { return nil }
+        let webView: WKWebView
+        if let idx = idleWebViews.firstIndex(where: {
+            webViewChapter[ObjectIdentifier($0)] == spineIndex && readyWebViews.contains(ObjectIdentifier($0))
+        }) {
+            // Already-rendered page: reuse and just re-fit (bounds may differ, e.g. full vs half).
+            webView = idleWebViews.remove(at: idx)
+            webView.alpha = 1
+            webView.evaluateJavaScript("if(window.refreshLayout){window.refreshLayout();}0;")
+        } else if let shell = idleWebViews.popLast() {
+            webView = shell
+            readyWebViews.remove(ObjectIdentifier(webView))
+            webView.alpha = 0
+            webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
+        } else {
+            webView = makeReaderWebView()
+            webView.alpha = 0
+            webView.loadFileURL(chapterURL, allowingReadAccessTo: baseURL)
+        }
+        webViewChapter[ObjectIdentifier(webView)] = spineIndex
+        webViewTargetPage[ObjectIdentifier(webView)] = 0
+        return webView
+    }
+
+    // Builds a page VC for a spread (one or two fixed-layout pages).
+    private func createSpreadViewController(spreadIndex index: Int) -> PageContentViewController? {
+        guard index >= 0, index < spreads.count else { return nil }
+        let spread = spreads[index]
+        guard let leftWV = acquireFXLWebView(forSpine: spread.left) else { return nil }
+        let rightWV = spread.right.flatMap { acquireFXLWebView(forSpine: $0) }
+        return PageContentViewController(webView: leftWV, pageIndex: 0, spineIndex: spread.left,
+                                         delegate: self, rightWebView: rightWV, rightSpineIndex: spread.right)
+    }
+
+    // Jumps a fixed-layout book to the spread containing the given spine item (TOC/bookmark nav).
+    private func showSpine(_ spineIndex: Int) {
+        guard !spreads.isEmpty else { return }
+        let si = spreadIndex(containingSpine: spineIndex) ?? 0
+        guard let vc = createSpreadViewController(spreadIndex: si) else { return }
+        currentSpineIndex = spreads[si].left
+        currentPage = 0
+        pageViewController.setViewControllers([vc], direction: .forward, animated: false)
+        updatePageLabel()
+    }
+
+    // Chooses the right renderer for a spine item: fit-to-screen for fixed-layout, column
+    // pagination for reflowable.
+    private func renderingJS(forSpineIndex index: Int) -> String {
+        return isFixedLayoutSpine(index) ? fixedLayoutJS() : readerPaginationJS()
+    }
+
+    // Renders a pre-paginated (fixed-layout) page: reads its authored viewport size and scales
+    // the whole page to fit the screen, centered/letterboxed. One spine item = one page.
+    private func fixedLayoutJS() -> String {
+        return """
+        (function(){
+            var theme = \(readerThemeJSObject());
+            function ensureStyle(){
+                var s = document.getElementById('__fxlStyle');
+                if(!s){ s = document.createElement('style'); s.id='__fxlStyle'; (document.head||document.documentElement).appendChild(s); }
+                return s;
+            }
+            function applyFrame(){
+                ensureStyle().textContent =
+                    'html{margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:'+theme.bg+'!important;}';
+            }
+            // The authored page size — read BEFORE we override the viewport meta below.
+            function authoredSize(){
+                var vp = document.querySelector('meta[name=viewport]');
+                if(vp){
+                    var c = vp.getAttribute('content')||'';
+                    var w = /width\\s*=\\s*(\\d+(?:\\.\\d+)?)/i.exec(c);
+                    var h = /height\\s*=\\s*(\\d+(?:\\.\\d+)?)/i.exec(c);
+                    if(w && h) return { w: parseFloat(w[1]), h: parseFloat(h[1]) };
+                }
+                var svg = document.querySelector('svg');
+                if(svg){
+                    var vb = svg.getAttribute('viewBox');
+                    if(vb){ var p = vb.split(/[\\s,]+/); if(p.length===4) return { w: parseFloat(p[2]), h: parseFloat(p[3]) }; }
+                    var sw = parseFloat(svg.getAttribute('width')), sh = parseFloat(svg.getAttribute('height'));
+                    if(sw && sh) return { w: sw, h: sh };
+                }
+                var img = document.querySelector('img');
+                if(img && img.naturalWidth && img.naturalHeight) return { w: img.naturalWidth, h: img.naturalHeight };
+                return null;
+            }
+            // Neutralize the page's own viewport so measurements are in real screen pixels,
+            // not the authored coordinate space (which is what caused the crop).
+            function overrideViewport(){
+                var m = document.querySelector('meta[name=viewport]');
+                if(!m){ m = document.createElement('meta'); m.setAttribute('name','viewport'); (document.head||document.documentElement).appendChild(m); }
+                m.setAttribute('content','width=device-width, initial-scale=1, viewport-fit=cover');
+            }
+            function fit(){
+                var b = document.body; if(!b) return;
+                var s = window.__fxlSize;
+                if(!s || !s.w || !s.h){ s = { w: Math.max(1, b.scrollWidth), h: Math.max(1, b.scrollHeight) }; }
+                var availW = document.documentElement.clientWidth || window.innerWidth;
+                var availH = document.documentElement.clientHeight || window.innerHeight;
+                var scale = Math.min(availW / s.w, availH / s.h);
+                if(!isFinite(scale) || scale <= 0) scale = 1;
+                b.style.setProperty('margin','0','important');
+                b.style.setProperty('position','absolute','important');
+                b.style.setProperty('width', s.w+'px','important');
+                b.style.setProperty('height', s.h+'px','important');
+                b.style.setProperty('transform-origin','top left','important');
+                b.style.setProperty('transform','scale('+scale+')','important');
+                b.style.setProperty('left', Math.max(0,(availW - s.w*scale)/2)+'px','important');
+                b.style.setProperty('top', Math.max(0,(availH - s.h*scale)/2)+'px','important');
+            }
+            if(window.__fxl){ theme = \(readerThemeJSObject()); applyFrame(); fit(); return 1; }
+            window.__fxl = true;
+            window.__fxlSize = authoredSize();
+            overrideViewport();
+            applyFrame();
+            fit();
+            requestAnimationFrame(fit);
+            // Re-fit once late-loading images report their size, and on rotation/resize.
+            window.addEventListener('load', function(){ if(!window.__fxlSize){ window.__fxlSize = authoredSize(); } fit(); });
+            window.addEventListener('resize', fit);
+            window.getTotalPages = function(){ return 1; };
+            window.getCurrentPage = function(){ return 0; };
+            window.setPageIndex = function(i){ return 1; };
+            window.refreshLayout = function(){ applyFrame(); fit(); return 1; };
+            window.setReaderTheme = function(t){ theme = t; applyFrame(); fit(); return 1; };
+            return 1;
+        })();
+        """
+    }
+
     func scrollToPage(in webView: WKWebView, pageIndex: Int, completion: (() -> Void)? = nil) {
         webView.evaluateJavaScript("if(window.setPageIndex){window.setPageIndex(\(pageIndex));}0;") { result, error in
             if let error = error {
@@ -1611,26 +1857,26 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             navigate(toTOCItem: tocItems[indexPath.row])
         } else if tableView == highlightsTableView {
             let highlight = highlights[indexPath.row]
-            currentSpineIndex = highlight.spineIndex
-            
-            // Navigate to the spine first
-            if let newPage = createPageViewController(for: 0, spineIndex: currentSpineIndex) {
-                pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+            if isFixedLayoutBook {
+                showSpine(highlight.spineIndex)
+                toggleHighlights()
+            } else {
+                currentSpineIndex = highlight.spineIndex
+
+                // Navigate to the spine first
+                if let newPage = createPageViewController(for: 0, spineIndex: currentSpineIndex) {
+                    pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+                }
+
+                // Find the correct page after the content loads
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.findAndNavigateToHighlight(highlight)
+                }
+
+                toggleHighlights()
             }
-            
-            // Find the correct page after the content loads
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                self.findAndNavigateToHighlight(highlight)
-            }
-            
-            toggleHighlights()
         } else {
-            currentSpineIndex = bookmarks[indexPath.row].spineIndex
-            currentPage = bookmarks[indexPath.row].pageNumber
-            if let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
-                pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
-            }
-            updatePageLabel()
+            openBookmark(bookmarks[indexPath.row])
             toggleBookmarks()
         }
         tableView.deselectRow(at: indexPath, animated: true)

@@ -14,36 +14,63 @@ class PageContentViewController: UIViewController {
     let spineIndex: Int
     var targetPageIndex: Int = 0
     weak var delegate: ReaderViewController?
-    
-    init(webView: WKWebView, pageIndex: Int, spineIndex: Int, delegate: ReaderViewController?) {
+
+    // Fixed-layout two-page spread: the second (right-hand) page, shown beside `webView`.
+    // nil for single pages and all reflowable content.
+    let rightWebView: WKWebView?
+    let rightSpineIndex: Int?
+
+    init(webView: WKWebView, pageIndex: Int, spineIndex: Int, delegate: ReaderViewController?,
+         rightWebView: WKWebView? = nil, rightSpineIndex: Int? = nil) {
         self.webView = webView
         self.pageIndex = pageIndex
         self.spineIndex = spineIndex
         self.targetPageIndex = pageIndex
         self.delegate = delegate
+        self.rightWebView = rightWebView
+        self.rightSpineIndex = rightSpineIndex
         super.init(nibName: nil, bundle: nil)
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
     deinit {
-        // Hand the webview back to the reader's warm pool for reuse.
+        // Hand the webview(s) back to the reader's warm pool for reuse.
         delegate?.recycleWebView(webView)
+        if let rightWebView { delegate?.recycleWebView(rightWebView) }
     }
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        ])
-        
+
+        if let rightWebView {
+            // Two pages side by side, splitting the width evenly.
+            view.addSubview(rightWebView)
+            rightWebView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                webView.topAnchor.constraint(equalTo: view.topAnchor),
+                webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                webView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.5),
+
+                rightWebView.topAnchor.constraint(equalTo: view.topAnchor),
+                rightWebView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                rightWebView.leadingAnchor.constraint(equalTo: webView.trailingAnchor),
+                rightWebView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                webView.topAnchor.constraint(equalTo: view.topAnchor),
+                webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            ])
+        }
+
         // Enable the menu controller
         becomeFirstResponder()
     }
