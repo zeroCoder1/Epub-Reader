@@ -1,7 +1,7 @@
 # Epub-Reader
 
 
-A native EPUB reader for iPhone and iPad, rebuilt from the ground up in Swift/UIKit. It parses EPUB 3 packages and renders them in a paginated `WKWebView` with highlighting, bookmarks, a table of contents, and rich theming.
+A native EPUB reader for iPhone and iPad, rebuilt from the ground up in Swift/UIKit. It parses EPUB 2 and EPUB 3 packages — reflowable **and** fixed-layout — and renders them in a `WKWebView` with highlighting, bookmarks, a table of contents, resume-where-you-left-off, and rich theming.
 
 ## Screenshots
 
@@ -55,14 +55,24 @@ A native EPUB reader for iPhone and iPad, rebuilt from the ground up in Swift/UI
 - Tap any book to start reading.
 
 ### Reading experience
-- EPUB 3 parsing of spine, metadata, cover image, and navigation document.
+- EPUB 2 and EPUB 3 parsing of spine, metadata, cover image, and navigation (EPUB 3 nav document, EPUB 2 NCX, with landmarks/`<guide>` fallback).
 - Paginated rendering using CSS multi-column layout in `WKWebView` — no continuous scrolling.
 - Turn pages by tapping the page edges or swiping; move between chapters seamlessly.
+- **Resume reading** — each book reopens exactly where you left off.
+- Books load off the main thread behind a loading indicator, so opening never blocks the UI.
 - Global page numbering ("current of total") and reading-progress percentage.
+- Non-linear content (`linear="no"`, e.g. endnotes) is kept reachable via links but skipped in the page sequence and counts.
+- Tapping an external link opens it in the system browser instead of hijacking the reading view.
 - Immersive mode: tap the center to hide/show the reading chrome.
 - Floating menu button and a glass command panel for quick actions.
 - Share the current book.
 - Orientation lock toggle to pin the current orientation.
+
+### Fixed-layout books (comics, picture books, manga)
+- Automatic detection of pre-paginated (`rendition:layout`) content.
+- Each page is scaled to fit the screen and centered/letterboxed — no cropping.
+- **Two-page spreads** in landscape (single page in portrait), honoring the book's `rendition:spread` and per-page `page-spread-left/right/center` so covers stand alone and facing pages line up.
+- Rotate freely — pairing rebuilds itself for the new orientation.
 
 ### Page transitions
 Choose how pages animate:
@@ -72,6 +82,7 @@ Choose how pages animate:
 
 ### Table of contents
 - Chapter list with per-chapter page numbers, book cover, and overall progress.
+- Book details in the header — author, publisher, language, publication year, and description (each shown only when the EPUB provides it).
 - Tap a chapter to jump straight to it.
 
 ### Highlights
@@ -84,6 +95,7 @@ Choose how pages animate:
 
 ### Bookmarks
 - One-tap bookmark for the current page; the floating menu icon animates to reflect the bookmarked state.
+- Bookmarks are anchored to a stable character offset, so tapping one returns to the exact page even after you change font size, margins, or rotate — not just an approximate spot.
 - Bookmarks are shown alongside highlights via a segmented control in the same list screen.
 - Tap a bookmark to jump back to it; swipe to delete.
 - Bookmarks persist per book.
@@ -102,6 +114,12 @@ Choose how pages animate:
   - Justified text
   - Reset to defaults
 - All theme and typography choices are remembered between sessions.
+
+### Under the hood
+- Per-book state (reading position, highlights, bookmarks) is keyed to the book's `dc:identifier`, so it survives renaming the file — and existing filename-keyed data is migrated forward automatically.
+- Package files (`container.xml`, OPF, NCX) are parsed in strict XML mode, so self-closing manifest/spine entries from tools like Calibre, Sigil, and InDesign don't get silently mis-nested.
+- Imports are size- and entry-count-limited before extraction (zip-bomb protection), and extracted files are cleaned up when the reader closes.
+- The reading `WKWebView` recovers automatically if its content process is terminated under memory pressure.
 
 ## Adding your own books
 Drop an EPUB 3 file into the app's resources (or the on-device Documents directory) and it will be discovered, parsed, and listed in the library.
