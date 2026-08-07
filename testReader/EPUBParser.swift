@@ -226,7 +226,13 @@ class EPUBParser {
             // Extract spine items
             var spineItems: [EPUBSpineItem] = []
             let manifestItems = try doc.select("manifest item")
+            let spineElement = try doc.select("spine").first()
             let spineRefs = try doc.select("spine itemref")
+
+            // page-progression-direction lives on <spine> ("ltr"/"rtl"/"default").
+            let ppdRaw: String? = (try? spineElement?.attr("page-progression-direction")) ?? nil
+            let ppd = ppdRaw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let pageProgressionDirection = (ppd?.isEmpty == false) ? ppd : nil
 
             // Manifest lookup by id for fallback resolution: id -> (href, media-type, fallback id).
             var manifestByID: [String: (href: String, mediaType: String, fallback: String?)] = [:]
@@ -257,7 +263,8 @@ class EPUBParser {
             let metadata = EPUBMetadata(title: title, author: author, coverImageURL: coverImageURL,
                                         identifier: identifier, language: language, publisher: publisher,
                                         bookDescription: bookDescription, publicationDate: publicationDate,
-                                        renditionSpread: renditionSpread)
+                                        renditionSpread: renditionSpread,
+                                        pageProgressionDirection: pageProgressionDirection)
 
             for ref in spineRefs {
                 let idref = try ref.attr("idref")

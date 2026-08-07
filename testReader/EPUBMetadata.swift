@@ -22,11 +22,14 @@ struct EPUBMetadata {
     let publicationDate: String?
     // Book-level rendition:spread (none/landscape/portrait/both/auto); nil ⇒ default (auto).
     let renditionSpread: String?
+    // Spine page-progression-direction ("ltr"/"rtl"/"default"); nil ⇒ ltr. "rtl" reverses
+    // page-turn direction and lays reflow columns / fixed-layout spreads right-to-left.
+    let pageProgressionDirection: String?
 
     init(title: String, author: String, coverImageURL: URL?, identifier: String?,
          language: String? = nil, publisher: String? = nil,
          bookDescription: String? = nil, publicationDate: String? = nil,
-         renditionSpread: String? = nil) {
+         renditionSpread: String? = nil, pageProgressionDirection: String? = nil) {
         self.title = title
         self.author = author
         self.coverImageURL = coverImageURL
@@ -36,6 +39,7 @@ struct EPUBMetadata {
         self.bookDescription = bookDescription
         self.publicationDate = publicationDate
         self.renditionSpread = renditionSpread
+        self.pageProgressionDirection = pageProgressionDirection
     }
 }
 
