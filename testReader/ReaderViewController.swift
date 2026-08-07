@@ -271,12 +271,18 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private func setupPageViewController() {
-        let transition = ReaderPageTransition(rawValue: UserDefaults.standard.string(forKey: "pageTransition") ?? "slide") ?? .slide
+        var transition = ReaderPageTransition(rawValue: UserDefaults.standard.string(forKey: "pageTransition") ?? "slide") ?? .slide
+        // Page curl can't flip its direction for RTL, so fall back to slide for RTL books.
+        if isRTL, transition == .curl { transition = .slide }
         let style: UIPageViewController.TransitionStyle = (transition == .curl) ? .pageCurl : .scroll
         let orientation: UIPageViewController.NavigationOrientation = (transition == .scroll) ? .vertical : .horizontal
         pageViewController = UIPageViewController(transitionStyle: style, navigationOrientation: orientation, options: nil)
         pageViewController.dataSource = self
         pageViewController.delegate = self
+        // Right-to-left books turn pages the other way: flip the horizontal paging direction
+        // so "next" (in reading order) reveals from the left. Vertical scroll mode is unaffected.
+        pageViewController.view.semanticContentAttribute =
+            (isRTL && orientation == .horizontal) ? .forceRightToLeft : .unspecified
         addChild(pageViewController)
         view.addSubview(pageViewController.view)
         pageViewController.view.frame = view.bounds
@@ -1363,7 +1369,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         currentSpineIndex = spineItems.firstIndex(where: { $0.linear }) ?? 0
 
         let fxlCount = spineItems.filter { $0.isFixedLayout }.count
-        print("FXL diagnostic: \(fxlCount)/\(spineItems.count) spine items are fixed-layout; rendition:spread=\(bookMetadata?.renditionSpread ?? "nil")")
+        print("FXL diagnostic: \(fxlCount)/\(spineItems.count) spine items are fixed-layout; rendition:spread=\(bookMetadata?.renditionSpread ?? "nil"); page-progression=\(bookMetadata?.pageProgressionDirection ?? "ltr (default)")")
 
         // Identity is now known, so per-book state keys are valid.
         loadHighlights()
@@ -1724,6 +1730,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             var doc = window.document;
             var body = doc.body;
             if (!body) return -1;
+            var rtl = \(isRTL);
             function locate(offset) {
                 var walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
                 var total = 0, node;
@@ -1750,7 +1757,8 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             var originLeft = b.left + (body.clientLeft || 0) + (parseFloat(cs.paddingLeft) || 0);
             var x = r.left - originLeft;
             body.scrollLeft = prev;
-            var page = Math.floor((x + 1) / pageW);
+            // RTL columns run leftward from page 0, so the element's x is negative for later pages.
+            var page = rtl ? Math.floor((-x + 1) / pageW) : Math.floor((x + 1) / pageW);
             if (page < 0) page = 0;
             if (page > total - 1) page = total - 1;
             return page;
@@ -1793,6 +1801,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         return """
         (function(){
             var theme = \(readerThemeJSObject());
+            var rtl = \(isRTL);
             if (window.__rdr) { window.__rdr.theme = theme; return window.refreshLayout(); }
             window.__rdr = { currentPage: 0, theme: theme };
             var m = document.querySelector('meta[name=viewport]');
@@ -1802,7 +1811,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 var t = window.__rdr.theme;
                 var mg = (t.margins || 0);
                 return 'html{margin:0 !important;padding:calc(env(safe-area-inset-top) + 50px) calc(env(safe-area-inset-right) + '+(24+mg)+'px) calc(env(safe-area-inset-bottom) + 120px) calc(env(safe-area-inset-left) + '+(24+mg)+'px) !important;height:100% !important;overflow:hidden !important;box-sizing:border-box !important;background:'+t.bg+' !important;-webkit-text-size-adjust:100% !important;}' +
-                    'body{margin:0 !important;padding:0 !important;box-sizing:border-box !important;height:100% !important;overflow:hidden !important;background:'+t.bg+' !important;color:'+t.color+' !important;font-family:'+t.fontFamily+',Georgia,serif !important;font-size:'+t.fontSize+'px !important;font-weight:'+(t.fontWeight||'normal')+' !important;line-height:'+t.lineHeight+' !important;letter-spacing:'+(t.letterSpacing||0)+'px !important;word-spacing:'+(t.wordSpacing||0)+'px !important;text-align:'+(t.justify?'justify':'left')+' !important;}' +
+                    'body{margin:0 !important;padding:0 !important;box-sizing:border-box !important;height:100% !important;overflow:hidden !important;direction:'+(rtl?'rtl':'ltr')+' !important;background:'+t.bg+' !important;color:'+t.color+' !important;font-family:'+t.fontFamily+',Georgia,serif !important;font-size:'+t.fontSize+'px !important;font-weight:'+(t.fontWeight||'normal')+' !important;line-height:'+t.lineHeight+' !important;letter-spacing:'+(t.letterSpacing||0)+'px !important;word-spacing:'+(t.wordSpacing||0)+'px !important;text-align:'+(t.justify?'justify':(rtl?'right':'left'))+' !important;}' +
                     'img,svg,video{max-height:100% !important;height:auto !important;}' +
                     'p{orphans:2;widows:2;}';
             }
@@ -1829,7 +1838,8 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             function totalPages(){ var b = document.body; if(!b) return 1; return Math.max(1, Math.round(b.scrollWidth / pageWidth())); }
             window.getTotalPages = function(){ return totalPages(); };
             window.getCurrentPage = function(){ return window.__rdr.currentPage; };
-            window.setPageIndex = function(i){ window.__rdr.currentPage = i; if(document.body){ document.body.scrollLeft = i * pageWidth(); } return totalPages(); };
+            // In RTL the scroll container runs the other way: page i sits at negative scrollLeft.
+            window.setPageIndex = function(i){ window.__rdr.currentPage = i; if(document.body){ document.body.scrollLeft = (rtl ? -1 : 1) * i * pageWidth(); } return totalPages(); };
             window.refreshLayout = function(){ injectStyle(); window.setPageIndex(window.__rdr.currentPage || 0); return totalPages(); };
             window.setReaderTheme = function(t){ window.__rdr.theme = t; injectStyle(); window.setPageIndex(window.__rdr.currentPage || 0); return totalPages(); };
             injectStyle();
@@ -1850,6 +1860,9 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     }
 
     private var isLandscape: Bool { view.bounds.width > view.bounds.height }
+
+    // Right-to-left reading (Arabic/Hebrew, RTL manga) per the spine's page-progression-direction.
+    private var isRTL: Bool { (bookMetadata?.pageProgressionDirection ?? "ltr") == "rtl" }
 
     // Whether pages should pair into two-up spreads right now, per rendition:spread × orientation.
     private func spreadPairingActive() -> Bool {
@@ -1930,6 +1943,13 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private func createSpreadViewController(spreadIndex index: Int) -> PageContentViewController? {
         guard index >= 0, index < spreads.count else { return nil }
         let spread = spreads[index]
+        // In RTL the earlier-read page sits on the right, so swap the two panes visually.
+        if isRTL, let secondSpine = spread.right {
+            guard let visualLeftWV = acquireFXLWebView(forSpine: secondSpine),
+                  let visualRightWV = acquireFXLWebView(forSpine: spread.left) else { return nil }
+            return PageContentViewController(webView: visualLeftWV, pageIndex: 0, spineIndex: secondSpine,
+                                             delegate: self, rightWebView: visualRightWV, rightSpineIndex: spread.left)
+        }
         guard let leftWV = acquireFXLWebView(forSpine: spread.left) else { return nil }
         let rightWV = spread.right.flatMap { acquireFXLWebView(forSpine: $0) }
         return PageContentViewController(webView: leftWV, pageIndex: 0, spineIndex: spread.left,
