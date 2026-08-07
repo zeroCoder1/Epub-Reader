@@ -102,7 +102,6 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         setupTOCView()
         setupHighlightsView()
         setupBookmarksView()
-        setupMenuController()
         setChromeVisible(false, animated: false)
 
         // EPUB parsing (ZIP extraction + XML) is heavy; run it off the main thread so the
@@ -162,11 +161,21 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         }
     }
     
-    func setupMenuController() {
-        // Add custom menu items for highlighting and bookmarking
-        let highlightMenuItem = UIMenuItem(title: "Highlight", action: #selector(highlightSelectedText))
-        let bookmarkMenuItem = UIMenuItem(title: "Bookmark", action: #selector(bookmarkFromMenu))
-        UIMenuController.shared.menuItems = [highlightMenuItem, bookmarkMenuItem]
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+
+        guard builder.system == .context else { return }
+
+        let readerSelectionMenu = UIMenu(
+            title: "",
+            options: .displayInline,
+            children: [
+                UICommand(title: "Highlight", action: #selector(highlightSelectedText)),
+                UICommand(title: "Bookmark", action: #selector(bookmarkFromMenu))
+            ]
+        )
+
+        builder.insertChild(readerSelectionMenu, atStartOfMenu: .standardEdit)
     }
     
     @objc func highlightSelectedText() {
