@@ -65,6 +65,8 @@ protocol ThemesSettingsViewControllerDelegate: AnyObject {
 
 class ThemesSettingsViewController: UIViewController {
     weak var delegate: ThemesSettingsViewControllerDelegate?
+    // Set by the reader; hides the page-curl transition, which has no RTL variant.
+    var isRTL: Bool = false
 
     private let themes: [ReaderTheme] = [
         ReaderTheme(name: "Original", backgroundHex: "#FFFFFF", textHex: "#000000", darkBackgroundHex: "#000000", darkTextHex: "#FFFFFF", bold: false),
@@ -368,7 +370,8 @@ class ThemesSettingsViewController: UIViewController {
     }
 
     @objc private func transitionTapped() {
-        let options = ReaderPageTransition.allCases
+        // Page curl has no right-to-left variant, so it's unavailable for RTL books.
+        let options = ReaderPageTransition.allCases.filter { !(isRTL && $0 == .curl) }
         let current = UserDefaults.standard.string(forKey: "pageTransition") ?? "slide"
         let selected = options.firstIndex(where: { $0.rawValue == current }) ?? 0
         presentGlassMenu(from: boltButton, items: options.map { (icon: $0.icon, title: $0.title) }, selectedIndex: selected) { [weak self] idx in

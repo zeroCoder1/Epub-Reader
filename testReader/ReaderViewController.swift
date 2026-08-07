@@ -681,6 +681,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         hideCommandPanel()
         let themesVC = ThemesSettingsViewController()
         themesVC.delegate = self
+        themesVC.isRTL = isRTL
         themesVC.modalPresentationStyle = .overFullScreen
         themesVC.modalTransitionStyle = .crossDissolve
         present(themesVC, animated: true)
@@ -750,7 +751,10 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         hideCommandPanel()
         let alert = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         alert.addAction(UIAlertAction(title: "Slide", style: .default) { _ in self.setTransitionMode(false) })
-        alert.addAction(UIAlertAction(title: "Curl", style: .default) { _ in self.setTransitionMode(true) })
+        // Page curl has no right-to-left variant, so it's unavailable for RTL books.
+        if !isRTL {
+            alert.addAction(UIAlertAction(title: "Curl", style: .default) { _ in self.setTransitionMode(true) })
+        }
         alert.addAction(UIAlertAction(title: "Fast Fade", style: .default) { _ in self.setTransitionMode(false) })
         alert.addAction(UIAlertAction(title: "Scroll", style: .default) { _ in self.setTransitionMode(false) })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
