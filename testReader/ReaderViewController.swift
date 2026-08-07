@@ -1735,6 +1735,8 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             var body = doc.body;
             if (!body) return -1;
             var rtl = \(isRTL);
+            // Vertical-rl also runs pages right-to-left, regardless of the declared direction.
+            try { var _wm = getComputedStyle(body).writingMode || ''; if(/vertical/.test(_wm)) rtl = true; } catch(e){}
             function locate(offset) {
                 var walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
                 var total = 0, node;
@@ -1814,10 +1816,24 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             function baseCSS(){
                 var t = window.__rdr.theme;
                 var mg = (t.margins || 0);
-                return 'html{margin:0 !important;padding:calc(env(safe-area-inset-top) + 50px) calc(env(safe-area-inset-right) + '+(24+mg)+'px) calc(env(safe-area-inset-bottom) + 120px) calc(env(safe-area-inset-left) + '+(24+mg)+'px) !important;height:100% !important;overflow:hidden !important;box-sizing:border-box !important;background:'+t.bg+' !important;-webkit-text-size-adjust:100% !important;}' +
-                    'body{margin:0 !important;padding:0 !important;box-sizing:border-box !important;height:100% !important;overflow:hidden !important;direction:'+(rtl?'rtl':'ltr')+' !important;background:'+t.bg+' !important;color:'+t.color+' !important;font-family:'+t.fontFamily+',Georgia,serif !important;font-size:'+t.fontSize+'px !important;font-weight:'+(t.fontWeight||'normal')+' !important;line-height:'+t.lineHeight+' !important;letter-spacing:'+(t.letterSpacing||0)+'px !important;word-spacing:'+(t.wordSpacing||0)+'px !important;text-align:'+(t.justify?'justify':(rtl?'right':'left'))+' !important;}' +
+                var v = window.__rdr.vertical;
+                // Vertical writing (縦書き) manages its own direction/alignment; don't override.
+                var dir = v ? '' : ('direction:'+(rtl?'rtl':'ltr')+' !important;');
+                var align = v ? '' : ('text-align:'+(t.justify?'justify':(rtl?'right':'left'))+' !important;');
+                // In vertical writing the top/bottom padding is the LINE LENGTH, so keep it small;
+                // horizontal reading keeps the roomier chrome padding.
+                var padT = v ? 18 : 50, padB = v ? 44 : 120;
+                return 'html{margin:0 !important;padding:calc(env(safe-area-inset-top) + '+padT+'px) calc(env(safe-area-inset-right) + '+(24+mg)+'px) calc(env(safe-area-inset-bottom) + '+padB+'px) calc(env(safe-area-inset-left) + '+(24+mg)+'px) !important;height:100% !important;overflow:hidden !important;box-sizing:border-box !important;background:'+t.bg+' !important;-webkit-text-size-adjust:100% !important;}' +
+                    'body{margin:0 !important;padding:0 !important;box-sizing:border-box !important;height:100% !important;overflow:hidden !important;'+dir+'background:'+t.bg+' !important;color:'+t.color+' !important;font-family:'+t.fontFamily+',Georgia,serif !important;font-size:'+t.fontSize+'px !important;font-weight:'+(t.fontWeight||'normal')+' !important;line-height:'+t.lineHeight+' !important;letter-spacing:'+(t.letterSpacing||0)+'px !important;word-spacing:'+(t.wordSpacing||0)+'px !important;'+align+'}' +
                     'img,svg,video{max-height:100% !important;height:auto !important;}' +
                     'p{orphans:2;widows:2;}';
+            }
+            // Detects vertical writing mode from the content's own CSS.
+            function isVertical(){
+                var wm = '';
+                try { var b = document.body; if(b){ var cs = getComputedStyle(b); wm = cs.writingMode || cs.webkitWritingMode || ''; } } catch(e){}
+                if(!wm){ try { wm = getComputedStyle(document.documentElement).writingMode || ''; } catch(e){} }
+                return /vertical/.test(wm);
             }
             function ensureStyle(){
                 var s = document.getElementById('__rdrStyle');
@@ -1825,25 +1841,45 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 return s;
             }
             function injectStyle(){
+                var b = document.body;
+                var vertical = b ? isVertical() : false;
+                window.__rdr.vertical = vertical;
                 ensureStyle().textContent = baseCSS();
-                var b = document.body; if(!b) return;
+                if(!b) return;
                 var w = b.clientWidth, h = b.clientHeight;
-                b.style.setProperty('-webkit-column-width', w + 'px', 'important');
-                b.style.setProperty('column-width', w + 'px', 'important');
-                b.style.setProperty('-webkit-column-gap', '0', 'important');
-                b.style.setProperty('column-gap', '0', 'important');
-                b.style.setProperty('-webkit-column-fill', 'auto', 'important');
-                b.style.setProperty('column-fill', 'auto', 'important');
-                b.style.setProperty('max-width', w + 'px', 'important');
-                b.style.setProperty('height', h + 'px', 'important');
+                if (vertical) {
+                    // vertical-rl already flows into horizontal columns; don't add CSS multicol.
+                    ['-webkit-column-width','column-width','-webkit-column-gap','column-gap','max-width'].forEach(function(p){ b.style.removeProperty(p); });
+                    // % heights don't resolve to the viewport when the root is vertical, so pin
+                    // html + body to the physical viewport height and put reading margins on body.
+                    var vpH = window.innerHeight || document.documentElement.clientHeight || h;
+                    var de = document.documentElement;
+                    de.style.setProperty('height', vpH + 'px', 'important');
+                    de.style.setProperty('padding', '0', 'important');
+                    de.style.setProperty('overflow', 'hidden', 'important');
+                    de.style.setProperty('box-sizing', 'border-box', 'important');
+                    b.style.setProperty('box-sizing', 'border-box', 'important');
+                    b.style.setProperty('height', vpH + 'px', 'important');
+                    b.style.setProperty('width', 'auto', 'important');
+                    b.style.setProperty('padding', 'calc(env(safe-area-inset-top) + 10px) 24px calc(env(safe-area-inset-bottom) + 40px) 24px', 'important');
+                } else {
+                    b.style.setProperty('-webkit-column-width', w + 'px', 'important');
+                    b.style.setProperty('column-width', w + 'px', 'important');
+                    b.style.setProperty('-webkit-column-gap', '0', 'important');
+                    b.style.setProperty('column-gap', '0', 'important');
+                    b.style.setProperty('-webkit-column-fill', 'auto', 'important');
+                    b.style.setProperty('column-fill', 'auto', 'important');
+                    b.style.setProperty('max-width', w + 'px', 'important');
+                    b.style.setProperty('height', h + 'px', 'important');
+                }
                 b.scrollLeft = 0;
             }
             function pageWidth(){ return document.body ? document.body.clientWidth : 1; }
             function totalPages(){ var b = document.body; if(!b) return 1; return Math.max(1, Math.round(b.scrollWidth / pageWidth())); }
             window.getTotalPages = function(){ return totalPages(); };
             window.getCurrentPage = function(){ return window.__rdr.currentPage; };
-            // In RTL the scroll container runs the other way: page i sits at negative scrollLeft.
-            window.setPageIndex = function(i){ window.__rdr.currentPage = i; if(document.body){ document.body.scrollLeft = (rtl ? -1 : 1) * i * pageWidth(); } return totalPages(); };
+            // In RTL (and vertical-rl) the scroll runs the other way: page i sits at negative scrollLeft.
+            window.setPageIndex = function(i){ window.__rdr.currentPage = i; if(document.body){ var effRtl = rtl || window.__rdr.vertical; document.body.scrollLeft = (effRtl ? -1 : 1) * i * pageWidth(); } return totalPages(); };
             window.refreshLayout = function(){ injectStyle(); window.setPageIndex(window.__rdr.currentPage || 0); return totalPages(); };
             window.setReaderTheme = function(t){ window.__rdr.theme = t; injectStyle(); window.setPageIndex(window.__rdr.currentPage || 0); return totalPages(); };
             injectStyle();
