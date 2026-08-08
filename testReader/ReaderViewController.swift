@@ -147,8 +147,36 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                     pageViewController.setViewControllers([vc], direction: .forward, animated: false)
                 }
             }
+            // Reflowable chapters re-paginate in viewWillTransition's completion, once WKWebView
+            // has settled its new width (it updates clientWidth asynchronously after resizing).
         }
         ensureReaderChromeAboveContent()
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            guard let self = self, !self.isFixedLayoutBook else { return }
+            self.refreshVisibleReflowLayout()
+        }
+    }
+
+    // Re-lays-out the currently visible reflowable chapter for the current bounds and re-anchors to
+    // the equivalent page. Runs after the webview has taken its new size.
+    private func refreshVisibleReflowLayout() {
+        guard let vc = pageViewController.viewControllers?.first as? PageContentViewController else { return }
+        let webView = vc.webView
+        let spine = vc.spineIndex
+        let oldTotal = (spine >= 0 && spine < totalPagesPerSpine.count) ? max(1, totalPagesPerSpine[spine]) : 1
+        let relative = Double(currentPage) / Double(oldTotal)
+        DispatchQueue.main.async {
+            webView.evaluateJavaScript("if(window.refreshLayout){window.refreshLayout();}(window.getTotalPages?window.getTotalPages():1);") { result, _ in
+                let pages = ((result as? Int).flatMap { $0 > 0 ? $0 : nil }) ?? 1
+                self.totalPagesPerSpine[spine] = pages
+                let target = min(pages - 1, max(0, Int((relative * Double(pages)).rounded())))
+                self.reanchor(toPage: target, in: webView, spineIndex: spine, pages: pages)
+            }
+        }
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -852,21 +880,22 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         }
     }
 
-    // Re-anchors the pager to `target` within an already-scrolled webview by handing it to a
-    // FRESH page VC. Re-setting the SAME view-controller instance doesn't make
-    // UIPageViewController re-query its neighbors, which left previous/next pages stale after a
-    // TOC/highlight/bookmark jump.
+    // Re-anchors the pager to `target` within the already-shown webview after an in-page jump
+    // (TOC/highlight/bookmark/rotation). It scrolls in place and then forces UIPageViewController
+    // to drop its stale pre-fetched neighbors (via a dataSource reset) so previous/next are
+    // re-queried at the new index — without swapping the visible webview, which could detach it
+    // from the window and blank it (its content process gets jettisoned).
     private func reanchor(toPage target: Int, in webView: WKWebView, spineIndex: Int, pages: Int) {
         let clamped = min(max(0, target), max(0, pages - 1))
         scrollToPage(in: webView, pageIndex: clamped) { webView.alpha = 1 }
         webViewChapter[ObjectIdentifier(webView)] = spineIndex
         webViewTargetPage[ObjectIdentifier(webView)] = clamped
-        if let old = findPageViewController(for: webView) {
-            old.recyclesWebViewOnDeinit = false   // its webview lives on in the replacement VC
-            let fresh = PageContentViewController(webView: webView, pageIndex: clamped,
-                                                  spineIndex: spineIndex, delegate: self)
-            fresh.targetPageIndex = clamped
-            pageViewController.setViewControllers([fresh], direction: .forward, animated: false)
+        if let vc = findPageViewController(for: webView) {
+            vc.pageIndex = clamped
+            vc.targetPageIndex = clamped
+            // Invalidate the pager's cached neighbor VCs so they're rebuilt from the new index.
+            pageViewController.dataSource = nil
+            pageViewController.dataSource = self
         }
         currentSpineIndex = spineIndex
         currentPage = clamped
