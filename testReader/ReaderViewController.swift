@@ -36,6 +36,8 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private var highlights: [Highlight] = []
     private var pendingHighlightNavigation: Highlight? // Highlight to scroll to once its spine finishes paginating
     private var pendingBookmarkNavigation: Bookmark? // Bookmark to scroll to once its spine finishes paginating
+    // TOC/in-text link target (element id) to scroll to once its spine finishes paginating.
+    private var pendingAnchorNavigation: (spineIndex: Int, anchor: String)?
     private var spreads: [Spread] = [] // fixed-layout viewing units (one or two pages each)
     private let tocTableView = UITableView()
     private let highlightsTableView = UITableView()
@@ -846,20 +848,30 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                     target = bookmark.pageNumber
                 }
             }
-            target = min(max(0, target), pages - 1)
-            self.scrollToPage(in: webView, pageIndex: target) {
-                webView.alpha = 1
-            }
-            if let vc = self.findPageViewController(for: webView) {
-                vc.pageIndex = target
-                vc.targetPageIndex = target
-                self.pageViewController.setViewControllers([vc], direction: .forward, animated: false)
-            }
-            self.currentSpineIndex = bookmark.spineIndex
-            self.currentPage = target
-            self.totalPages = pages
-            self.updatePageLabel()
+            self.reanchor(toPage: target, in: webView, spineIndex: bookmark.spineIndex, pages: pages)
         }
+    }
+
+    // Re-anchors the pager to `target` within an already-scrolled webview by handing it to a
+    // FRESH page VC. Re-setting the SAME view-controller instance doesn't make
+    // UIPageViewController re-query its neighbors, which left previous/next pages stale after a
+    // TOC/highlight/bookmark jump.
+    private func reanchor(toPage target: Int, in webView: WKWebView, spineIndex: Int, pages: Int) {
+        let clamped = min(max(0, target), max(0, pages - 1))
+        scrollToPage(in: webView, pageIndex: clamped) { webView.alpha = 1 }
+        webViewChapter[ObjectIdentifier(webView)] = spineIndex
+        webViewTargetPage[ObjectIdentifier(webView)] = clamped
+        if let old = findPageViewController(for: webView) {
+            old.recyclesWebViewOnDeinit = false   // its webview lives on in the replacement VC
+            let fresh = PageContentViewController(webView: webView, pageIndex: clamped,
+                                                  spineIndex: spineIndex, delegate: self)
+            fresh.targetPageIndex = clamped
+            pageViewController.setViewControllers([fresh], direction: .forward, animated: false)
+        }
+        currentSpineIndex = spineIndex
+        currentPage = clamped
+        totalPages = pages
+        updatePageLabel()
     }
 
     private func deleteBookmark(_ bookmark: Bookmark) {
@@ -1283,13 +1295,36 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     private func navigate(toTOCItem item: EPUBTOCItem) {
         guard let index = spineIndex(forTOCItem: item) else { return }
+        let parts = item.href.components(separatedBy: "#")
+        let anchor = (parts.count > 1 && !parts[1].isEmpty) ? (parts[1].removingPercentEncoding ?? parts[1]) : nil
+        navigate(toSpineIndex: index, anchor: anchor)
+    }
+
+    // Shared navigation used by the TOC and by in-content links: jump to a spine item, optionally
+    // scrolling to an anchor element (href#id) once the chapter paginates.
+    private func navigate(toSpineIndex index: Int, anchor: String?) {
+        guard index >= 0, index < spineItems.count else { return }
         if isFixedLayoutBook { showSpine(index); return }
         currentSpineIndex = index
         currentPage = 0
-        if let newPage = createPageViewController(for: currentPage, spineIndex: currentSpineIndex) {
+        pendingAnchorNavigation = anchor.map { (index, $0) }
+        if let newPage = createPageViewController(for: 0, spineIndex: index) {
             pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
         }
         updatePageLabel()
+    }
+
+    // Maps an in-book file URL (from a tapped link) back to its spine index.
+    private func spineIndex(forFileURL url: URL) -> Int? {
+        guard let baseURL = baseURL else { return nil }
+        let basePath = baseURL.standardizedFileURL.path
+        let targetPath = url.standardizedFileURL.path
+        let rel = targetPath.hasPrefix(basePath + "/") ? String(targetPath.dropFirst(basePath.count + 1)) : url.lastPathComponent
+        let relFile = rel.components(separatedBy: "#")[0]
+        return spineItems.firstIndex { spine in
+            let spineHref = spine.href.components(separatedBy: "#")[0]
+            return spineHref == relFile || spineHref.hasSuffix(relFile) || relFile.hasSuffix(spineHref)
+        }
     }
     
     @objc private func toggleHighlights() {
@@ -1463,6 +1498,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 let pages = max(1, totalPagesPerSpine[targetSpineIndex])
                 webView.alpha = 1
                 scrollToBookmark(pending, in: webView, pages: pages)
+            } else if let pending = pendingAnchorNavigation, pending.spineIndex == targetSpineIndex {
+                // Honor a pending TOC/link anchor jump instead of the raw requested page.
+                pendingAnchorNavigation = nil
+                let pages = max(1, totalPagesPerSpine[targetSpineIndex])
+                webView.alpha = 1
+                scrollToAnchor(pending.anchor, in: webView, pages: pages, spineIndex: targetSpineIndex)
             } else {
                 // Chapter is already laid out, but the warm webview still shows its previous
                 // page. Scroll to the target first, then reveal, so we don't flash the old page
@@ -1581,8 +1622,24 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             return
         }
         let scheme = url.scheme?.lowercased()
-        // File loads (chapters, in-book anchors) and blank pages stay in the reader.
-        if scheme == "file" || scheme == "about" || scheme == nil {
+        if scheme == "file" {
+            // A tapped in-content link (TOC page, cross-reference, footnote) must go through our
+            // own navigation so spine tracking, page counts and paging stay correct — letting the
+            // WebView load the file itself would desync the reader.
+            if navigationAction.navigationType == .linkActivated {
+                decisionHandler(.cancel)
+                if let index = spineIndex(forFileURL: url) {
+                    let anchor = url.fragment?.removingPercentEncoding
+                    navigate(toSpineIndex: index, anchor: (anchor?.isEmpty == false) ? anchor : nil)
+                }
+                return
+            }
+            // Programmatic chapter loads (loadFileURL) are navigationType .other — allow.
+            decisionHandler(.allow)
+            return
+        }
+        // Blank pages stay in the reader.
+        if scheme == "about" || scheme == nil {
             decisionHandler(.allow)
             return
         }
@@ -1673,6 +1730,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 self.scrollToBookmark(pending, in: webView, pages: pages)
                 return
             }
+            // Same for a pending TOC/link anchor jump (href#id).
+            if let pending = self.pendingAnchorNavigation, pending.spineIndex == spineIndex, self.isVisibleWebView(webView) {
+                self.pendingAnchorNavigation = nil
+                self.scrollToAnchor(pending.anchor, in: webView, pages: pages, spineIndex: spineIndex)
+                return
+            }
 
             let targetPage = min(max(0, requestedPage), pages - 1)
             self.scrollToPage(in: webView, pageIndex: targetPage) {
@@ -1699,21 +1762,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 let rel = min(max(highlight.relativePosition, 0), 1)
                 target = Int((rel * Double(pages)).rounded(.down))
             }
-            target = min(max(0, target), pages - 1)
-            self.scrollToPage(in: webView, pageIndex: target) {
-                webView.alpha = 1
-            }
-            // Keep the page VC's index in sync so swipes step from the highlight's page.
-            if let vc = self.findPageViewController(for: webView) {
-                vc.pageIndex = target
-                vc.targetPageIndex = target
-                // Re-anchor so the pager drops stale neighbors cached at the old index.
-                self.pageViewController.setViewControllers([vc], direction: .forward, animated: false)
-            }
-            self.currentSpineIndex = highlight.spineIndex
-            self.currentPage = target
-            self.totalPages = pages
-            self.updatePageLabel()
+            self.reanchor(toPage: target, in: webView, spineIndex: highlight.spineIndex, pages: pages)
         }
     }
 
@@ -1721,6 +1770,46 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private func computeHighlightPage(in webView: WKWebView, highlight: Highlight, completion: @escaping (Int) -> Void) {
         computePage(forOffset: highlight.startOffset ?? -1, length: max(1, highlight.range.length),
                     in: webView, completion: completion)
+    }
+
+    // Scrolls an already-paginated webview to the page holding the given anchor element.
+    private func scrollToAnchor(_ anchor: String, in webView: WKWebView, pages: Int, spineIndex: Int) {
+        computePage(forElementId: anchor, in: webView) { computed in
+            self.reanchor(toPage: computed < 0 ? 0 : computed, in: webView, spineIndex: spineIndex, pages: pages)
+        }
+    }
+
+    // Maps an element id (or <a name>) to its current column/page index; -1 if not found.
+    private func computePage(forElementId anchor: String, in webView: WKWebView, completion: @escaping (Int) -> Void) {
+        let escaped = anchor.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let js = """
+        (function() {
+            var doc = window.document, body = doc.body;
+            if (!body) return -1;
+            var rtl = \(isRTL);
+            try { var _wm = getComputedStyle(body).writingMode || ''; if(/vertical/.test(_wm)) rtl = true; } catch(e){}
+            var id = "\(escaped)";
+            var el = doc.getElementById(id);
+            if (!el && doc.getElementsByName) { el = doc.getElementsByName(id)[0]; }
+            if (!el) { try { el = doc.querySelector('[id="' + id + '"]'); } catch(e){} }
+            if (!el) return -1;
+            var pageW = body.clientWidth || 1;
+            var total = Math.max(1, Math.round(body.scrollWidth / pageW));
+            var prev = body.scrollLeft;
+            body.scrollLeft = 0;
+            var r = el.getBoundingClientRect();
+            var b = body.getBoundingClientRect();
+            var cs = window.getComputedStyle(body);
+            var originLeft = b.left + (body.clientLeft || 0) + (parseFloat(cs.paddingLeft) || 0);
+            var x = r.left - originLeft;
+            body.scrollLeft = prev;
+            var page = rtl ? Math.floor((-x + 1) / pageW) : Math.floor((x + 1) / pageW);
+            if (page < 0) page = 0;
+            if (page > total - 1) page = total - 1;
+            return page;
+        })();
+        """
+        webView.evaluateJavaScript(js) { result, _ in completion((result as? Int) ?? -1) }
     }
 
     // Maps a UTF-16 text offset in the chapter's textContent to its current column/page index.

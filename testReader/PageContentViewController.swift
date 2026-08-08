@@ -20,6 +20,10 @@ class PageContentViewController: UIViewController {
     let rightWebView: WKWebView?
     let rightSpineIndex: Int?
 
+    // Set to false when the webview is being handed to a replacement VC (e.g. re-anchoring
+    // after a TOC/highlight jump), so deinit doesn't recycle a webview still in use.
+    var recyclesWebViewOnDeinit = true
+
     init(webView: WKWebView, pageIndex: Int, spineIndex: Int, delegate: ReaderViewController?,
          rightWebView: WKWebView? = nil, rightSpineIndex: Int? = nil) {
         self.webView = webView
@@ -37,7 +41,9 @@ class PageContentViewController: UIViewController {
     }
 
     deinit {
-        // Hand the webview(s) back to the reader's warm pool for reuse.
+        // Hand the webview(s) back to the reader's warm pool for reuse (unless it was handed
+        // off to a replacement page VC).
+        guard recyclesWebViewOnDeinit else { return }
         delegate?.recycleWebView(webView)
         if let rightWebView { delegate?.recycleWebView(rightWebView) }
     }
