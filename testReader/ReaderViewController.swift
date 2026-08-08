@@ -1943,7 +1943,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 var padT = v ? 18 : 50, padB = v ? 44 : 120;
                 return 'html{margin:0 !important;padding:calc(env(safe-area-inset-top) + '+padT+'px) calc(env(safe-area-inset-right) + '+(24+mg)+'px) calc(env(safe-area-inset-bottom) + '+padB+'px) calc(env(safe-area-inset-left) + '+(24+mg)+'px) !important;height:100% !important;overflow:hidden !important;box-sizing:border-box !important;background:'+t.bg+' !important;-webkit-text-size-adjust:100% !important;}' +
                     'body{margin:0 !important;padding:0 !important;box-sizing:border-box !important;height:100% !important;overflow:hidden !important;'+dir+'background:'+t.bg+' !important;color:'+t.color+' !important;font-family:'+t.fontFamily+',Georgia,serif !important;font-size:'+t.fontSize+'px !important;font-weight:'+(t.fontWeight||'normal')+' !important;line-height:'+t.lineHeight+' !important;letter-spacing:'+(t.letterSpacing||0)+'px !important;word-spacing:'+(t.wordSpacing||0)+'px !important;'+align+'}' +
-                    'img,svg,video{max-height:100% !important;height:auto !important;}' +
+                    'img,svg,video{max-width:100% !important;max-height:100% !important;height:auto !important;}' +
+                    'canvas{max-width:100% !important;}' +
+                    // Author CSS multi-column (column-count/width) conflicts with our own column
+                    // pagination and renders as overlapping/clipped text, so flatten it to a single
+                    // column. (Body keeps our pagination via its inline !important column-width.)
+                    '*{-webkit-column-count:auto !important;column-count:auto !important;-webkit-column-width:auto !important;column-width:auto !important;-webkit-column-gap:normal !important;column-gap:normal !important;column-rule:none !important;}' +
                     'p{orphans:2;widows:2;}';
             }
             // Detects vertical writing mode from the content's own CSS.
