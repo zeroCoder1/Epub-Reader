@@ -18,6 +18,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         window = UIWindow(frame: UIScreen.main.bounds)
+        // The app chrome (library, settings, theme panels) is designed light-only; lock it to
+        // light so it doesn't flip with the system. The reader themes its page independently
+        // (WebView colors), so dark/sepia reading still works.
+        window?.overrideUserInterfaceStyle = .light
         let navController = UINavigationController(rootViewController: LibraryViewController())
         window?.rootViewController = navController
         window?.makeKeyAndVisible()

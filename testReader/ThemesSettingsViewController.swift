@@ -108,6 +108,12 @@ class ThemesSettingsViewController: UIViewController {
         setupCustomizeButton()
     }
 
+    // The real system appearance, independent of the app-wide light override on the window
+    // (the window scene's trait environment isn't affected by the window's own override).
+    private var systemUserInterfaceStyle: UIUserInterfaceStyle {
+        view.window?.windowScene?.traitCollection.userInterfaceStyle ?? UIScreen.main.traitCollection.userInterfaceStyle
+    }
+
     private func applyPanelStyle() {
         let mode = UserDefaults.standard.integer(forKey: "readerThemeMode")
         switch mode {
@@ -396,7 +402,7 @@ class ThemesSettingsViewController: UIViewController {
             let isDark: Bool
             switch idx {
             case 1: isDark = true
-            case 2: isDark = self.traitCollection.userInterfaceStyle == .dark
+            case 2: isDark = self.systemUserInterfaceStyle == .dark
             default: isDark = false
             }
             UserDefaults.standard.set(isDark, forKey: "isDarkMode")
