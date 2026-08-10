@@ -161,6 +161,24 @@ class EPUBParser {
         return nil
     }
 
+    // Lightweight title/author/cover for the library, without keeping the extraction around.
+    // Runs a full unzip (simple + correct); call it off the main thread.
+    static func briefMetadata(at url: URL) -> (title: String, author: String, coverData: Data?)? {
+        do { try enforceArchiveLimits(at: url) } catch { return nil }
+        let root = extractionsRoot
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let tempDir = root.appendingPathComponent("meta-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        guard SSZipArchive.unzipFile(atPath: url.path, toDestination: tempDir.path) else { return nil }
+        let containerURL = tempDir.appendingPathComponent("META-INF/container.xml")
+        guard let opfPath = parseContainerXML(at: containerURL),
+              let (metadata, _, _, _, _) = parseOPFFile(at: tempDir.appendingPathComponent(opfPath), rootURL: tempDir) else {
+            return nil
+        }
+        let coverData = metadata.coverImageURL.flatMap { try? Data(contentsOf: $0) }
+        return (metadata.title, metadata.author, coverData)
+    }
+
     private static func parseContainerXML(at url: URL) -> String? {
         guard let xmlString = try? String(contentsOf: url),
               let doc = try? SwiftSoup.parse(xmlString, "", Parser.xmlParser()) else { return nil }
