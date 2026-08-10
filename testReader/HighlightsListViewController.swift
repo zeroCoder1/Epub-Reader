@@ -254,11 +254,16 @@ final class HighlightListCell: UITableViewCell {
         textLabel_.font = UIFont.systemFont(ofSize: 15, weight: .medium)
         textLabel_.textColor = .label
         textLabel_.numberOfLines = 3
+        // Let the highlight text wrap/shrink so the page label keeps its full width.
+        textLabel_.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textLabel_.translatesAutoresizingMaskIntoConstraints = false
 
         pageLabel.font = UIFont.systemFont(ofSize: 13)
         pageLabel.textColor = .secondaryLabel
+        pageLabel.textAlignment = .right
+        pageLabel.numberOfLines = 1
         pageLabel.setContentHuggingPriority(.required, for: .horizontal)
+        pageLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         pageLabel.translatesAutoresizingMaskIntoConstraints = false
 
         contentView.addSubview(container)
@@ -318,10 +323,13 @@ final class BookmarkListCell: UITableViewCell {
 
         titleLabel.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
         titleLabel.textColor = .label
+        titleLabel.numberOfLines = 1
+        titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         dateLabel.font = UIFont.systemFont(ofSize: 13)
         dateLabel.textColor = .secondaryLabel
+        dateLabel.numberOfLines = 1
         dateLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let textStack = UIStackView(arrangedSubviews: [titleLabel, dateLabel])
