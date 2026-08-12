@@ -38,6 +38,9 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
     private var pendingBookmarkNavigation: Bookmark? // Bookmark to scroll to once its spine finishes paginating
     // TOC/in-text link target (element id) to scroll to once its spine finishes paginating.
     private var pendingAnchorNavigation: (spineIndex: Int, anchor: String)?
+    // Search result to scroll to once its spine paginates (exact match by query+occurrence,
+    // with the relative position as a fallback).
+    private var pendingSearchNavigation: (spineIndex: Int, query: String, occurrence: Int, relativePosition: Double)?
     private var spreads: [Spread] = [] // fixed-layout viewing units (one or two pages each)
     private let tocTableView = UITableView()
     private let highlightsTableView = UITableView()
@@ -508,7 +511,7 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
 
     private func configurePanelButtons() {
         panelHeaderButton.addTarget(self, action: #selector(toggleTOC), for: .touchUpInside)
-        searchButton.addTarget(self, action: #selector(showSearchNotReady), for: .touchUpInside)
+        searchButton.addTarget(self, action: #selector(presentSearch), for: .touchUpInside)
         themeButton.addTarget(self, action: #selector(showThemeAndSettingsPanel), for: .touchUpInside)
 
         configureRoundActionButton(shareButton, symbol: "square.and.arrow.up", action: #selector(shareCurrentBook))
@@ -701,10 +704,180 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
         floatingMenuButton.isUserInteractionEnabled = visible
     }
 
-    @objc private func showSearchNotReady() {
-        let alert = UIAlertController(title: "Search", message: "Search UI will be added next.", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+    @objc private func presentSearch() {
+        hideCommandPanel()
+        guard let baseURL = baseURL, !spineItems.isEmpty else { return }
+        let searchVC = SearchViewController(performSearch: { [weak self] query, completion in
+            guard let self = self else { completion([]); return }
+            // Snapshot the immutable book data on the main thread, then search off-main.
+            let spine = self.spineItems
+            let toc = self.tocItems
+            let totals = self.totalPagesPerSpine
+            DispatchQueue.global(qos: .userInitiated).async {
+                let results = ReaderViewController.searchBook(query: query, spine: spine, toc: toc, baseURL: baseURL, totals: totals)
+                DispatchQueue.main.async { completion(results) }
+            }
+        }, onSelect: { [weak self] result in
+            self?.navigateToSearchResult(result)
+        })
+        searchVC.modalPresentationStyle = .pageSheet
+        present(searchVC, animated: true)
+    }
+
+    private func navigateToSearchResult(_ result: EPUBSearchResult) {
+        let index = result.spineIndex
+        guard index >= 0, index < spineItems.count else { return }
+        if isFixedLayoutBook { showSpine(index); return }
+        currentSpineIndex = index
+        currentPage = 0
+        pendingSearchNavigation = (index, result.query, result.occurrence, result.relativePosition)
+        if let newPage = createPageViewController(for: 0, spineIndex: index) {
+            pageViewController.setViewControllers([newPage], direction: .forward, animated: false)
+        }
+        updatePageLabel()
+    }
+
+    // Scrolls an already-paginated webview to the page nearest a relative position.
+    private func scrollToRelative(spineIndex: Int, relativePosition: Double, in webView: WKWebView, pages: Int) {
+        let clamped = min(max(relativePosition, 0), 1)
+        let target = min(pages - 1, max(0, Int((clamped * Double(pages)).rounded(.down))))
+        reanchor(toPage: target, in: webView, spineIndex: spineIndex, pages: pages)
+    }
+
+    // Finds the exact match (query's Nth occurrence) in the webview, scrolls to its page and
+    // briefly highlights it; falls back to the relative position if the match can't be located.
+    private func scrollToSearchMatch(_ pending: (spineIndex: Int, query: String, occurrence: Int, relativePosition: Double),
+                                     in webView: WKWebView, pages: Int) {
+        let escaped = pending.query.lowercased()
+            .replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        let findJS = """
+        (function(){
+            var body = document.body; if(!body) return -1;
+            var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+            var full = "", node; while(node = walker.nextNode()){ full += node.textContent; }
+            var lower = full.toLowerCase(), q = "\(escaped)";
+            var from = 0, count = 0;
+            while(true){ var f = lower.indexOf(q, from); if(f === -1) return -1; if(count === \(pending.occurrence)) return f; count++; from = f + 1; }
+        })();
+        """
+        webView.evaluateJavaScript(findJS) { result, _ in
+            let offset = (result as? Int) ?? -1
+            guard offset >= 0 else {
+                self.scrollToRelative(spineIndex: pending.spineIndex, relativePosition: pending.relativePosition, in: webView, pages: pages)
+                return
+            }
+            let length = max(1, pending.query.utf16.count)
+            self.highlightSearchMatch(offset: offset, length: length, in: webView)
+            self.computePage(forOffset: offset, length: length, in: webView) { computed in
+                let target = computed >= 0 ? computed
+                    : Int((min(max(pending.relativePosition, 0), 1) * Double(pages)).rounded(.down))
+                self.reanchor(toPage: min(pages - 1, max(0, target)), in: webView, spineIndex: pending.spineIndex, pages: pages)
+            }
+        }
+    }
+
+    // Temporarily wraps the matched text in a highlight span (removed after a moment).
+    private func highlightSearchMatch(offset: Int, length: Int, in webView: WKWebView) {
+        let js = """
+        (function(){
+            var body = document.body; if(!body) return;
+            var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+            var total = 0, node, startNode, startOff, endNode, endOff;
+            while(node = walker.nextNode()){
+                var len = node.textContent.length;
+                if(startNode == null && total + len > \(offset)){ startNode = node; startOff = \(offset) - total; }
+                if(startNode != null && total + len >= \(offset + length)){ endNode = node; endOff = \(offset + length) - total; break; }
+                total += len;
+            }
+            if(startNode == null || endNode == null) return;
+            try{
+                var range = document.createRange();
+                range.setStart(startNode, startOff); range.setEnd(endNode, endOff);
+                var mark = document.createElement('span');
+                mark.style.backgroundColor = 'rgba(255,205,0,0.55)';
+                mark.style.borderRadius = '3px';
+                range.surroundContents(mark);
+                setTimeout(function(){ if(mark.parentNode){ mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark); mark.parentNode && mark.parentNode.normalize && mark.parentNode.normalize(); } }, 2800);
+            }catch(e){}
+        })();
+        """
+        webView.evaluateJavaScript(js)
+    }
+
+    // MARK: - Full-text search (pure; runs off the main thread)
+
+    private static let maxSearchResults = 200
+    private static let maxResultsPerChapter = 40
+
+    static func searchBook(query: String, spine: [EPUBSpineItem], toc: [EPUBTOCItem], baseURL: URL, totals: [Int]) -> [EPUBSearchResult] {
+        let lowerQuery = query.lowercased()
+        guard lowerQuery.count >= 2 else { return [] }
+        var results: [EPUBSearchResult] = []
+        for (spineIndex, item) in spine.enumerated() where item.linear {
+            if results.count >= maxSearchResults { break }
+            let fileURL = baseURL.appendingPathComponent(item.href)
+            guard let html = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? (try? String(contentsOf: fileURL)),
+                  let doc = try? SwiftSoup.parse(html) else { continue }
+            let text = ((try? doc.body()?.text()) ?? nil) ?? ((try? doc.text()) ?? "")
+            if text.isEmpty { continue }
+            let chapter = chapterTitle(forSpineIndex: spineIndex, toc: toc, spine: spine)
+            let chars = Array(text)
+            let total = max(1, chars.count)
+            let lowerText = text.lowercased()
+            var searchStart = lowerText.startIndex
+            var perChapter = 0
+            while perChapter < maxResultsPerChapter, results.count < maxSearchResults,
+                  let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
+                let charIndex = lowerText.distance(from: lowerText.startIndex, to: range.lowerBound)
+                let rel = Double(charIndex) / Double(total)
+                let page = globalPage(spineIndex: spineIndex, relativePosition: rel, spine: spine, totals: totals)
+                results.append(EPUBSearchResult(spineIndex: spineIndex, snippet: snippet(chars, at: charIndex, queryLength: query.count),
+                                                query: query, chapter: chapter, page: page, relativePosition: rel, occurrence: perChapter))
+                searchStart = range.upperBound
+                perChapter += 1
+            }
+        }
+        return results
+    }
+
+    private static func snippet(_ chars: [Character], at index: Int, queryLength: Int) -> String {
+        let start = max(0, index - 40)
+        let end = min(chars.count, index + queryLength + 60)
+        var s = String(chars[start..<end]).replacingOccurrences(of: "\n", with: " ")
+        s = s.trimmingCharacters(in: .whitespaces)
+        if start > 0 { s = "…" + s }
+        if end < chars.count { s += "…" }
+        return s
+    }
+
+    private static func globalPage(spineIndex: Int, relativePosition: Double, spine: [EPUBSpineItem], totals: [Int]) -> Int {
+        var page = 1
+        for i in 0..<spineIndex where i < totals.count && spine[i].linear { page += max(1, totals[i]) }
+        let spineTotal = spineIndex < totals.count ? max(1, totals[spineIndex]) : 1
+        let clamped = min(max(relativePosition, 0), 1)
+        page += min(spineTotal - 1, Int((clamped * Double(spineTotal)).rounded(.down)))
+        return page
+    }
+
+    private static func chapterTitle(forSpineIndex spineIndex: Int, toc: [EPUBTOCItem], spine: [EPUBSpineItem]) -> String? {
+        var best: String? = nil
+        var bestIndex = -1
+        for item in toc {
+            guard let si = tocSpineIndex(item, spine: spine), si <= spineIndex, si > bestIndex else { continue }
+            bestIndex = si
+            best = item.label
+        }
+        return best
+    }
+
+    private static func tocSpineIndex(_ item: EPUBTOCItem, spine: [EPUBSpineItem]) -> Int? {
+        var cleanHref = item.href
+        if cleanHref.hasPrefix("./") { cleanHref = String(cleanHref.dropFirst(2)) }
+        let fileHref = cleanHref.components(separatedBy: "#")[0]
+        return spine.firstIndex { s in
+            let sHref = s.href.components(separatedBy: "#")[0]
+            return sHref == fileHref || sHref.hasSuffix(fileHref) || fileHref.hasSuffix(sHref)
+        }
     }
 
     @objc private func showThemeAndSettingsPanel() {
@@ -1533,6 +1706,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
                 let pages = max(1, totalPagesPerSpine[targetSpineIndex])
                 webView.alpha = 1
                 scrollToAnchor(pending.anchor, in: webView, pages: pages, spineIndex: targetSpineIndex)
+            } else if let pending = pendingSearchNavigation, pending.spineIndex == targetSpineIndex {
+                // Honor a pending search-result jump instead of the raw requested page.
+                pendingSearchNavigation = nil
+                let pages = max(1, totalPagesPerSpine[targetSpineIndex])
+                webView.alpha = 1
+                scrollToSearchMatch(pending, in: webView, pages: pages)
             } else {
                 // Chapter is already laid out, but the warm webview still shows its previous
                 // page. Scroll to the target first, then reveal, so we don't flash the old page
@@ -1763,6 +1942,12 @@ class ReaderViewController: UIViewController, WKNavigationDelegate, UIPageViewCo
             if let pending = self.pendingAnchorNavigation, pending.spineIndex == spineIndex, self.isVisibleWebView(webView) {
                 self.pendingAnchorNavigation = nil
                 self.scrollToAnchor(pending.anchor, in: webView, pages: pages, spineIndex: spineIndex)
+                return
+            }
+            // Same for a pending search-result jump (exact match, relative-position fallback).
+            if let pending = self.pendingSearchNavigation, pending.spineIndex == spineIndex, self.isVisibleWebView(webView) {
+                self.pendingSearchNavigation = nil
+                self.scrollToSearchMatch(pending, in: webView, pages: pages)
                 return
             }
 
